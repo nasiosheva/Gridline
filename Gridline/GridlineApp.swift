@@ -29,9 +29,6 @@ struct GridlineApp: App {
                 .environmentObject(topAreaStoreRegistry)
                 .task {
                     appDelegate.sessionStore = sessionStore
-                    diffStoreRegistry.onWorktreeBaseBranchConsumed = { [weak appState] repoID in
-                        appState?.consumeWorktreeBaseBranch(for: repoID)
-                    }
                 }
         }
         .commands {

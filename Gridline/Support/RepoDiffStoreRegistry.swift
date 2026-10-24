@@ -15,28 +15,41 @@ final class RepoDiffStoreRegistry: ObservableObject {
     private var visibleRepoIDs = Set<UUID>()
 
     /// Dipanggil setelah default perbandingan awal sebuah pane worktree dikonsumsi,
-    /// dengan repo ID yang bersangkutan — pemanggil (lihat `GridlineApp`) memakai ini
+    /// dengan repo ID yang bersangkutan — pemanggil (lihat `ContentView`) memakai ini
     /// untuk membersihkan `Repo.worktreeBaseBranch` di state tersimpan.
     var onWorktreeBaseBranchConsumed: ((UUID) -> Void)?
+    var onComparisonSelectionChanged: ((UUID, DiffComparisonSelection) -> Void)?
 
     func store(for repo: Repo) -> RepoDiffStore {
         if let existing = stores[repo.id] {
             return existing
         }
-        let store = RepoDiffStore(repoPath: repo.path, initialComparisonBranch: repo.worktreeBaseBranch)
+        let store = RepoDiffStore(
+            repoPath: repo.path,
+            initialComparisonBranch: repo.worktreeBaseBranch,
+            savedComparisonSelection: repo.diffComparisonSelection
+        )
         stores[repo.id] = store
         store.onInitialComparisonBranchConsumed = { [weak self] in
             self?.onWorktreeBaseBranchConsumed?(repo.id)
+        }
+        store.onComparisonSelectionChanged = { [weak self] selection in
+            self?.onComparisonSelectionChanged?(repo.id, selection)
         }
         store.setWatching(visibleRepoIDs.contains(repo.id))
         return store
     }
 
-    func setVisibleRepoIDs(_ repoIDs: Set<UUID>) {
-        guard visibleRepoIDs != repoIDs else { return }
+    func setVisibleRepoIDs(_ repoIDs: Set<UUID>, refreshExisting: Bool = false) {
+        guard visibleRepoIDs != repoIDs || refreshExisting else { return }
+        let previouslyVisibleRepoIDs = visibleRepoIDs
         visibleRepoIDs = repoIDs
         stores.forEach { repoID, store in
-            store.setWatching(repoIDs.contains(repoID))
+            let shouldWatch = repoIDs.contains(repoID)
+            store.setWatching(shouldWatch)
+            if refreshExisting && shouldWatch && previouslyVisibleRepoIDs.contains(repoID) {
+                store.refreshGitMetadata()
+            }
         }
     }
 }

@@ -55,7 +55,13 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            updateStoreVisibility()
+            diffStoreRegistry.onWorktreeBaseBranchConsumed = { repoID in
+                appState.consumeWorktreeBaseBranch(for: repoID)
+            }
+            diffStoreRegistry.onComparisonSelectionChanged = { repoID, selection in
+                appState.setDiffComparisonSelection(selection, for: repoID)
+            }
+            updateStoreVisibility(refreshExistingDiffStores: true)
             clearAttention(for: layout.activePaneID)
         }
         .onChange(of: paneRepoIDs) { _, _ in
@@ -185,8 +191,8 @@ struct ContentView: View {
         Set(visiblePaneSlots.filter { $0.id != layout.terminalOnlyPaneID }.compactMap(\.repoID))
     }
 
-    private func updateStoreVisibility() {
-        diffStoreRegistry.setVisibleRepoIDs(paneRepoIDs)
+    private func updateStoreVisibility(refreshExistingDiffStores: Bool = false) {
+        diffStoreRegistry.setVisibleRepoIDs(paneRepoIDs, refreshExisting: refreshExistingDiffStores)
         topAreaStoreRegistry.setVisibleRepoIDs(topAreaRepoIDs)
     }
 

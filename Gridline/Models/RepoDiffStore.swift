@@ -36,6 +36,7 @@ final class RepoDiffStore: ObservableObject {
     @Published private(set) var hasLoadedInitialStatus = false
 
     private var watcher: RepoFileWatcher?
+    private var headWatcher: GitHEADWatcher?
     private var diffLoadToken = UUID()
     private var comparisonBranchesLoadedAt: Date?
     private var refreshRequestedAgain = false
@@ -44,12 +45,14 @@ final class RepoDiffStore: ObservableObject {
     /// baru langsung menunjukkan diff branch tersebut, bukan "Local Changes" yang
     /// kosong. Dikonsumsi sekali saja, tidak menimpa pilihan manual pengguna setelahnya.
     private var initialComparisonBranch: String?
+    private let hadSavedComparisonSelection: Bool
     /// Dipanggil tepat sekali setelah `initialComparisonBranch` dikonsumsi (berhasil
     /// diterapkan atau tidak) — pemanggil (lihat `RepoDiffStoreRegistry`) memakai ini
     /// untuk menghapus `Repo.worktreeBaseBranch` dari state tersimpan, supaya default
     /// ini cuma berlaku sekali saat pane worktree baru dibuat, bukan setiap kali app
     /// dibuka ulang (yang sebelumnya menimpa pilihan perbandingan manual pengguna).
     var onInitialComparisonBranchConsumed: (() -> Void)?
+    var onComparisonSelectionChanged: ((DiffComparisonSelection) -> Void)?
 
     var allEntries: [DiffFileEntry] {
         staged + unstaged + untracked
@@ -67,9 +70,25 @@ final class RepoDiffStore: ObservableObject {
         Set(allEntries.map(\.path)).count
     }
 
-    init(repoPath: String, initialComparisonBranch: String? = nil) {
+    init(
+        repoPath: String,
+        initialComparisonBranch: String? = nil,
+        savedComparisonSelection: DiffComparisonSelection? = nil
+    ) {
         self.repoPath = repoPath
         self.initialComparisonBranch = initialComparisonBranch
+        self.hadSavedComparisonSelection = savedComparisonSelection != nil
+        switch savedComparisonSelection {
+        case .localChanges:
+            break
+        case .againstBranch(let branch):
+            comparisonBranch = branch
+        case .betweenBranches(let base, let target):
+            comparisonBaseBranch = base
+            comparisonTargetBranch = target
+        case nil:
+            break
+        }
         guard isGitAvailable else {
             hasLoadedInitialStatus = true
             return
@@ -83,10 +102,15 @@ final class RepoDiffStore: ObservableObject {
             watcher = RepoFileWatcher(path: repoPath) { [weak self] in
                 Task { await self?.refresh() }
             }
+            headWatcher = GitHEADWatcher(repoPath: repoPath) { [weak self] in
+                self?.refreshGitMetadata()
+            }
             Task { await refresh() }
         } else {
             watcher?.stop()
             watcher = nil
+            headWatcher?.stop()
+            headWatcher = nil
         }
     }
 
@@ -121,11 +145,14 @@ final class RepoDiffStore: ObservableObject {
                 comparisonBranchesLoadedAt = .now
             }
 
-            if let pendingInitialBranch = initialComparisonBranch {
+            if let pendingInitialBranch = initialComparisonBranch,
+               !availableComparisonBranches.isEmpty {
                 initialComparisonBranch = nil
-                if comparisonBranch == nil, comparisonBaseBranch == nil,
+                if !hadSavedComparisonSelection,
+                   comparisonBranch == nil, comparisonBaseBranch == nil,
                    availableComparisonBranches.contains(pendingInitialBranch) {
                     comparisonBranch = pendingInitialBranch
+                    onComparisonSelectionChanged?(.againstBranch(pendingInitialBranch))
                 }
                 onInitialComparisonBranchConsumed?()
             }
@@ -142,14 +169,18 @@ final class RepoDiffStore: ObservableObject {
                        self.comparisonTargetBranch == comparisonTargetBranch {
                         comparisonEntries = entries
                     }
-                } else {
+                } else if !availableComparisonBranches.isEmpty {
                     self.comparisonBaseBranch = nil
                     self.comparisonTargetBranch = nil
                     comparisonEntries = []
+                    onComparisonSelectionChanged?(.localChanges)
                 }
-            } else if let comparisonBranch, !availableComparisonBranches.contains(comparisonBranch) {
+            } else if let comparisonBranch,
+                      !availableComparisonBranches.isEmpty,
+                      !availableComparisonBranches.contains(comparisonBranch) {
                 self.comparisonBranch = nil
                 comparisonEntries = []
+                onComparisonSelectionChanged?(.localChanges)
             } else if let comparisonBranch {
                 let entries = await GitDiffService.comparisonEntries(at: repoPath, against: comparisonBranch)
                 if self.comparisonBranch == comparisonBranch, !isComparingBranches {
@@ -171,22 +202,28 @@ final class RepoDiffStore: ObservableObject {
         return Date.now.timeIntervalSince(comparisonBranchesLoadedAt) >= Configuration.comparisonBranchCacheDuration
     }
 
-    /// Dipanggil saat pemilih branch dibuka: perubahan branch lokal (dibuat/dihapus/
-    /// di-rename lewat terminal) hanya mengubah isi `.git/`, yang sengaja dikecualikan
-    /// dari FSEvents watcher (lihat RepoFileWatcher) supaya checkout besar tidak lemot.
-    /// Akibatnya daftar branch tidak auto-update dari watcher — picker harus memaksa
-    /// muat ulang sendiri saat dibuka, melewati cache 15 detik.
-    func refreshComparisonBranchesForPicker() {
+    /// Perubahan branch bisa hanya menyentuh `.git/`, yang dikecualikan dari
+    /// FSEvents. Muat ulang status dan daftar branch saat picker atau jendela
+    /// dibuka kembali, melewati cache branch 15 detik.
+    func refreshGitMetadata() {
         comparisonBranchesLoadedAt = nil
         Task { await refresh() }
     }
 
     func selectComparisonBranch(_ branch: String?) {
-        guard comparisonBranch != branch || comparisonBaseBranch != nil || comparisonTargetBranch != nil else { return }
+        if initialComparisonBranch != nil {
+            initialComparisonBranch = nil
+            onInitialComparisonBranchConsumed?()
+        }
+        guard comparisonBranch != branch || comparisonBaseBranch != nil || comparisonTargetBranch != nil else {
+            if branch == nil { onComparisonSelectionChanged?(.localChanges) }
+            return
+        }
         diffLoadToken = UUID()
         comparisonBranch = branch
         comparisonBaseBranch = nil
         comparisonTargetBranch = nil
+        onComparisonSelectionChanged?(branch.map(DiffComparisonSelection.againstBranch) ?? .localChanges)
         selectedFileID = nil
         selectedDiff = nil
         guard let branch else {
@@ -202,10 +239,15 @@ final class RepoDiffStore: ObservableObject {
         guard baseBranch != targetBranch,
               availableComparisonBranches.contains(baseBranch),
               availableComparisonBranches.contains(targetBranch) else { return }
+        if initialComparisonBranch != nil {
+            initialComparisonBranch = nil
+            onInitialComparisonBranchConsumed?()
+        }
         diffLoadToken = UUID()
         comparisonBranch = nil
         comparisonBaseBranch = baseBranch
         comparisonTargetBranch = targetBranch
+        onComparisonSelectionChanged?(.betweenBranches(base: baseBranch, target: targetBranch))
         selectedFileID = nil
         selectedDiff = nil
         comparisonEntries = []

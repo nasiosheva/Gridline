@@ -61,7 +61,7 @@ struct BranchComparisonPickerView: View {
         .frame(width: 420, height: 270)
         .onAppear {
             selectInitialBranches()
-            store.refreshComparisonBranchesForPicker()
+            store.refreshGitMetadata()
         }
         .onReceive(store.$availableComparisonBranches) { branches in
             // Hanya betulkan pilihan kalau branch yang sedang terpilih sudah tidak ada

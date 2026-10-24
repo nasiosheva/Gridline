@@ -303,7 +303,7 @@ private struct DiffBranchPickerPopover: View {
         .frame(width: 360, height: 420)
         .onAppear {
             searchText = ""
-            store.refreshComparisonBranchesForPicker()
+            store.refreshGitMetadata()
         }
     }
 }

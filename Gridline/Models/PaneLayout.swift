@@ -175,7 +175,12 @@ struct PaneLayout: Codable, Equatable {
         if slots.count < desiredCount {
             slots.append(contentsOf: (slots.count..<desiredCount).map { _ in PaneSlot() })
         } else if slots.count > desiredCount {
-            slots = Array(slots.prefix(desiredCount))
+            var retainedSlots = Array(slots.prefix(desiredCount))
+            if !retainedSlots.contains(where: { $0.id == activePaneID }),
+               let activeSlot = slots.first(where: { $0.id == activePaneID }) {
+                retainedSlots[retainedSlots.count - 1] = activeSlot
+            }
+            slots = retainedSlots
         }
         if !slots.contains(where: { $0.id == activePaneID }) {
             activePaneID = slots.last!.id

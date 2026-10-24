@@ -221,6 +221,13 @@ final class AppStateStore: ObservableObject {
         persist()
     }
 
+    func setDiffComparisonSelection(_ selection: DiffComparisonSelection, for repoID: UUID) {
+        guard let index = state.savedRepos.firstIndex(where: { $0.id == repoID }),
+              state.savedRepos[index].diffComparisonSelection != selection else { return }
+        state.savedRepos[index].diffComparisonSelection = selection
+        persist()
+    }
+
     func removeRepo(id: UUID) {
         state.savedRepos.removeAll { $0.id == id }
         state.recentRepoIDs.removeAll { $0 == id }
