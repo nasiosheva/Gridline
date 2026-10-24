@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Xcode user state and generated products
+**/xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+.build/
+.swiftpm/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcarchive
+*.xcresult
+
+# Local assistant instructions and code index
+CLAUDE.md
+.claude/
+.codebase-memory/

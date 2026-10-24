@@ -1,0 +1,214 @@
+import Foundation
+
+/// Stable localization keys. User-facing copy lives in Localizable.xcstrings.
+/// The system language selects Indonesian or English for the app.
+enum L10n {
+    static func format(_ resource: LocalizedStringResource, _ arguments: CVarArg...) -> String {
+        String(format: String(localized: resource), locale: .current, arguments: arguments)
+    }
+
+    enum Common {
+        static let ok: LocalizedStringResource = "common.ok"
+        static let cancel: LocalizedStringResource = "common.cancel"
+        static let close: LocalizedStringResource = "common.close"
+        static let openRepository: LocalizedStringResource = "common.open_repository"
+        static let copyPath: LocalizedStringResource = "common.copy_path"
+        static let copyDiff: LocalizedStringResource = "common.copy_diff"
+        static let openInFinder: LocalizedStringResource = "common.open_in_finder"
+    }
+
+    enum Menu {
+        static let quit: LocalizedStringResource = "menu.quit"
+        static let findInViewer: LocalizedStringResource = "menu.find_in_viewer"
+        static let clearTerminal: LocalizedStringResource = "menu.clear_terminal"
+        static let repository: LocalizedStringResource = "menu.repository"
+        static let openRepository: LocalizedStringResource = "menu.open_repository"
+        static let searchRepositoryOrFile: LocalizedStringResource = "menu.search_repository_or_file"
+        static let closeActiveRepository: LocalizedStringResource = "menu.close_active_repository"
+        static let pane: LocalizedStringResource = "menu.pane"
+        static let addPane: LocalizedStringResource = "menu.add_pane"
+        static let focusPane: LocalizedStringResource = "menu.focus_pane"
+        static let focusLeft: LocalizedStringResource = "menu.focus_left"
+        static let focusRight: LocalizedStringResource = "menu.focus_right"
+        static let focusUp: LocalizedStringResource = "menu.focus_up"
+        static let focusDown: LocalizedStringResource = "menu.focus_down"
+        static let maximizePane: LocalizedStringResource = "menu.maximize_pane"
+        static let maximizeTerminal: LocalizedStringResource = "menu.maximize_terminal"
+        static let focusDiff: LocalizedStringResource = "menu.focus_diff"
+        static let help: LocalizedStringResource = "menu.help"
+        static let exportLog: LocalizedStringResource = "menu.export_log"
+        static let keyboardShortcuts: LocalizedStringResource = "menu.keyboard_shortcuts"
+    }
+
+    enum Repository {
+        static let openTitle: LocalizedStringResource = "repository.open_title"
+        static let openPrompt: LocalizedStringResource = "repository.open_prompt"
+        static let invalidRepositoryMessage: LocalizedStringResource = "repository.invalid_message"
+        static let closeAction: LocalizedStringResource = "repository.close_action"
+        static let identityColor: LocalizedStringResource = "repository.identity_color"
+        static let workStatusHelp: LocalizedStringResource = "repository.work_status_help"
+        static let workStatusIdle: LocalizedStringResource = "repository.work_status_idle"
+        static let workStatusRunning: LocalizedStringResource = "repository.work_status_running"
+        static let workStatusAttention: LocalizedStringResource = "repository.work_status_attention"
+        static let attentionCompleted: LocalizedStringResource = "repository.attention_completed"
+        static let attentionFailed: LocalizedStringResource = "repository.attention_failed"
+        static let detachedHead: LocalizedStringResource = "repository.detached_head"
+        static let ahead: LocalizedStringResource = "repository.ahead"
+        static let behind: LocalizedStringResource = "repository.behind"
+        static let gitUnavailable: LocalizedStringResource = "repository.git_unavailable"
+        static let chooseFolderAgain: LocalizedStringResource = "repository.choose_folder_again"
+    }
+
+    enum Pane {
+        static let actions: LocalizedStringResource = "pane.actions"
+        static let close: LocalizedStringResource = "pane.close"
+        static let accessibilityLabel: LocalizedStringResource = "pane.accessibility_label"
+        static let emptyMessage: LocalizedStringResource = "pane.empty_message"
+        static let maximize: LocalizedStringResource = "pane.maximize"
+        static let restoreGrid: LocalizedStringResource = "pane.restore_grid"
+        static let terminalOnly: LocalizedStringResource = "pane.terminal_only"
+        static let showTopArea: LocalizedStringResource = "pane.show_top_area"
+        static let attentionCount: LocalizedStringResource = "pane.attention_count"
+    }
+
+    enum Layout {
+        static let menuLabel: LocalizedStringResource = "layout.menu_label"
+        static let menuHelp: LocalizedStringResource = "layout.menu_help"
+        static let onePane: LocalizedStringResource = "layout.one_pane"
+        static let twoColumns: LocalizedStringResource = "layout.two_columns"
+        static let fourGrid: LocalizedStringResource = "layout.four_grid"
+    }
+
+    enum Terminal {
+        static let newTab: LocalizedStringResource = "terminal.new_tab"
+        static let tabNamePlaceholder: LocalizedStringResource = "terminal.tab_name_placeholder"
+        static let closeTab: LocalizedStringResource = "terminal.close_tab"
+        static let closeRunningTabTitle: LocalizedStringResource = "terminal.close_running_tab_title"
+        static let closeRunningTabMessage: LocalizedStringResource = "terminal.close_running_tab_message"
+        static let finishedNotification: LocalizedStringResource = "terminal.finished_notification"
+        static let failedNotification: LocalizedStringResource = "terminal.failed_notification"
+    }
+
+    enum QuickSwitcher {
+        static let searchPlaceholder: LocalizedStringResource = "quick_switcher.search_placeholder"
+        static let repositories: LocalizedStringResource = "quick_switcher.repositories"
+        static let openFiles: LocalizedStringResource = "quick_switcher.open_files"
+    }
+
+    enum Viewer {
+        static let tooLargeTitle: LocalizedStringResource = "viewer.too_large_title"
+        static let tooLargeMessage: LocalizedStringResource = "viewer.too_large_message"
+        static let mediaLimit: LocalizedStringResource = "viewer.media_limit"
+        static let textLimit: LocalizedStringResource = "viewer.text_limit"
+        static let unsupportedTitle: LocalizedStringResource = "viewer.unsupported_title"
+        static let unsupportedMessage: LocalizedStringResource = "viewer.unsupported_message"
+        static let notFoundTitle: LocalizedStringResource = "viewer.not_found_title"
+        static let openFailedTitle: LocalizedStringResource = "viewer.open_failed_title"
+        static let readAttributesFailed: LocalizedStringResource = "viewer.read_attributes_failed"
+        static let imageLoadFailed: LocalizedStringResource = "viewer.image_load_failed"
+        static let readContentsFailed: LocalizedStringResource = "viewer.read_contents_failed"
+    }
+
+    enum Diff {
+        static let localChanges: LocalizedStringResource = "diff.local_changes"
+        static let compareBranchHelp: LocalizedStringResource = "diff.compare_branch_help"
+        static let recentFilterHelp: LocalizedStringResource = "diff.recent_filter_help"
+        static let hideLargeFiles: LocalizedStringResource = "diff.hide_large_files"
+        static let hideLargeFilesHelp: LocalizedStringResource = "diff.hide_large_files_help"
+        static let comparedWithBranch: LocalizedStringResource = "diff.compared_with_branch"
+        static let loading: LocalizedStringResource = "diff.loading"
+        static let noChanges: LocalizedStringResource = "diff.no_changes"
+        static let noBranchDifferences: LocalizedStringResource = "diff.no_branch_differences"
+        static let noFilesMatchFilter: LocalizedStringResource = "diff.no_files_match_filter"
+        static let staged: LocalizedStringResource = "diff.staged"
+        static let unstaged: LocalizedStringResource = "diff.unstaged"
+        static let untracked: LocalizedStringResource = "diff.untracked"
+        static let selectFile: LocalizedStringResource = "diff.select_file"
+        static let focus: LocalizedStringResource = "diff.focus"
+        static let restoreFileList: LocalizedStringResource = "diff.restore_file_list"
+        static let mode: LocalizedStringResource = "diff.mode"
+        static let splitMode: LocalizedStringResource = "diff.split_mode"
+        static let unifiedMode: LocalizedStringResource = "diff.unified_mode"
+        static let gitNotFound: LocalizedStringResource = "diff.git_not_found"
+        static let installCommandLineTools: LocalizedStringResource = "diff.install_command_line_tools"
+        static let tenMinutes: LocalizedStringResource = "diff.ten_minutes"
+        static let noBinaryPreview: LocalizedStringResource = "diff.no_binary_preview"
+        static let noChangesToDisplay: LocalizedStringResource = "diff.no_changes_to_display"
+        static let copyPath: LocalizedStringResource = "diff.copy_path"
+        static let copyCommand: LocalizedStringResource = "diff.copy_command"
+    }
+
+    enum TopArea {
+        static let diffTab: LocalizedStringResource = "top_area.diff_tab"
+        static let showViewerAsTab: LocalizedStringResource = "top_area.show_viewer_as_tab"
+        static let showViewerBesideDiff: LocalizedStringResource = "top_area.show_viewer_beside_diff"
+    }
+
+    enum Toast {
+        static let repositoryClosed: LocalizedStringResource = "toast.repository_closed"
+        static let reopen: LocalizedStringResource = "toast.reopen"
+        static let repositoryClosedAccessibility: LocalizedStringResource = "toast.repository_closed_accessibility"
+    }
+
+    enum Settings {
+        static let terminal: LocalizedStringResource = "settings.terminal"
+        static let scrollbackLimit: LocalizedStringResource = "settings.scrollback_limit"
+        static let diagnostics: LocalizedStringResource = "settings.diagnostics"
+        static let diagnosticsInfo: LocalizedStringResource = "settings.diagnostics_info"
+        static let scrollbackChangeInfo: LocalizedStringResource = "settings.scrollback_change_info"
+    }
+
+    enum Picker {
+        static let ambiguousFilesTitle: LocalizedStringResource = "picker.ambiguous_files_title"
+    }
+
+    enum Shortcut {
+        static let helpTitle: LocalizedStringResource = "shortcut.help_title"
+        static let openRepository: LocalizedStringResource = "shortcut.open_repository"
+        static let searchRepositoryOrFile: LocalizedStringResource = "shortcut.search_repository_or_file"
+        static let openTerminalTab: LocalizedStringResource = "shortcut.open_terminal_tab"
+        static let closeActiveTab: LocalizedStringResource = "shortcut.close_active_tab"
+        static let closeRepository: LocalizedStringResource = "shortcut.close_repository"
+        static let focusPane: LocalizedStringResource = "shortcut.focus_pane"
+        static let focusNearestPane: LocalizedStringResource = "shortcut.focus_nearest_pane"
+        static let maximizePane: LocalizedStringResource = "shortcut.maximize_pane"
+        static let maximizeTerminal: LocalizedStringResource = "shortcut.maximize_terminal"
+        static let findInViewer: LocalizedStringResource = "shortcut.find_in_viewer"
+        static let clearTerminal: LocalizedStringResource = "shortcut.clear_terminal"
+        static let quit: LocalizedStringResource = "shortcut.quit"
+    }
+
+    enum Notification {
+    }
+
+    enum Diagnostics {
+        static let exportFailedTitle: LocalizedStringResource = "diagnostics.export_failed_title"
+        static let reportTitle: LocalizedStringResource = "diagnostics.report_title"
+        static let generated: LocalizedStringResource = "diagnostics.generated"
+        static let appVersion: LocalizedStringResource = "diagnostics.app_version"
+        static let macOSVersion: LocalizedStringResource = "diagnostics.macos_version"
+        static let gitVersion: LocalizedStringResource = "diagnostics.git_version"
+        static let events: LocalizedStringResource = "diagnostics.events"
+        static let unknown: LocalizedStringResource = "diagnostics.unknown"
+    }
+
+    enum Workspace {
+        static let closeRepositoryTitle: LocalizedStringResource = "workspace.close_repository_title"
+        static let repositoryClosedMessage: LocalizedStringResource = "workspace.repository_closed_message"
+        static let quitTitle: LocalizedStringResource = "workspace.quit_title"
+        static let quitMessage: LocalizedStringResource = "workspace.quit_message"
+        static let cannotOpenRepository: LocalizedStringResource = "workspace.cannot_open_repository"
+        static let folderPermissionTitle: LocalizedStringResource = "workspace.folder_permission_title"
+        static let openSystemSettings: LocalizedStringResource = "workspace.open_system_settings"
+        static let folderPermissionMessage: LocalizedStringResource = "workspace.folder_permission_message"
+        static let minimumWindowSize: LocalizedStringResource = "workspace.minimum_window_size"
+        static let emptyPaneTitle: LocalizedStringResource = "workspace.empty_pane_title"
+        static let recentRepositories: LocalizedStringResource = "workspace.recent_repositories"
+        static let clearRecentRepositories: LocalizedStringResource = "workspace.clear_recent_repositories"
+        static let noRecentRepositories: LocalizedStringResource = "workspace.no_recent_repositories"
+        static let openRepository: LocalizedStringResource = "workspace.open_repository"
+        static let missingRepository: LocalizedStringResource = "workspace.missing_repository"
+        static let openedOutsideRepository: LocalizedStringResource = "workspace.opened_outside_repository"
+        static let fileNotFound: LocalizedStringResource = "workspace.file_not_found"
+    }
+}

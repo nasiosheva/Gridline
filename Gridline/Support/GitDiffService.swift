@@ -1,0 +1,372 @@
+//
+//  GitDiffService.swift
+//  Gridline
+//
+//  Mengambil dan mem-parsing data untuk panel diff: daftar file berubah dari
+//  `git --no-optional-locks status --porcelain=v2`, jumlah baris dari
+//  `git diff --numstat`, dan isi diff per file dari `git diff` (unified).
+//  Semua baca saja, tidak pernah menulis ke `.git` (D8, bagian 6).
+//
+
+import Foundation
+
+enum GitDiffService {
+    static func comparisonBranches(at path: String) async -> [String] {
+        async let branchesOutput = GitProcess.run(
+            ["--no-optional-locks", "branch", "--format=%(refname:short)"],
+            at: path
+        )
+        async let currentOutput = GitProcess.run(
+            ["--no-optional-locks", "branch", "--show-current"],
+            at: path
+        )
+        let (branches, current) = await (branchesOutput, currentOutput)
+        guard branches.exitCode == 0 else { return [] }
+        let currentBranch = current.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return branches.stdout
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .filter { !$0.isEmpty && $0 != currentBranch }
+            .sorted()
+    }
+
+    static func comparisonEntries(at path: String, against branch: String) async -> [DiffFileEntry] {
+        async let statusOutput = GitProcess.run(
+            ["--no-optional-locks", "diff", "--no-ext-diff", "--name-status", "-z", branch, "--"],
+            at: path
+        )
+        async let countsOutput = GitProcess.run(
+            ["--no-optional-locks", "diff", "--no-ext-diff", "--numstat", branch, "--"],
+            at: path
+        )
+        let (output, countsResult) = await (statusOutput, countsOutput)
+        guard output.exitCode == 0 else { return [] }
+        let counts = countsResult.exitCode == 0 ? parseNumstat(countsResult.stdout) : [:]
+        let fields = output.stdout.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
+        var entries: [DiffFileEntry] = []
+        var index = 0
+        while index < fields.count {
+            let statusToken = fields[index]
+            index += 1
+            guard let code = statusToken.first else { continue }
+            if code == "R" || code == "C" {
+                guard index + 1 < fields.count else { break }
+                let oldPath = fields[index]
+                let newPath = fields[index + 1]
+                index += 2
+                let status: DiffFileStatus = code == "R" ? .renamed(from: oldPath) : .copied(from: oldPath)
+                entries.append(DiffFileEntry(path: newPath, group: .unstaged, status: status))
+            } else {
+                guard index < fields.count else { break }
+                let filePath = fields[index]
+                index += 1
+                let status: DiffFileStatus
+                switch code {
+                case "A": status = .added
+                case "D": status = .deleted
+                case "T": status = .typeChanged
+                default: status = .modified
+                }
+                entries.append(DiffFileEntry(path: filePath, group: .unstaged, status: status))
+            }
+        }
+
+        for index in entries.indices {
+            if let lineCounts = counts[entries[index].path] {
+                entries[index].additions = lineCounts.additions
+                entries[index].deletions = lineCounts.deletions
+            }
+            let filePath = (path as NSString).appendingPathComponent(entries[index].path)
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: filePath) {
+                entries[index].fileSizeBytes = (attributes[.size] as? NSNumber)?.int64Value
+                entries[index].modificationDate = attributes[.modificationDate] as? Date
+            }
+        }
+        return entries
+    }
+
+    // MARK: - Status (daftar file)
+
+    /// Mengambil daftar file berubah, dikelompokkan staged/unstaged/untracked,
+    /// lengkap dengan jumlah baris ditambah/dihapus.
+    static func statusEntries(at path: String) async -> [DiffFileEntry] {
+        let statusOutput = await GitProcess.run(["--no-optional-locks", "status", "--porcelain=v2"], at: path)
+        guard statusOutput.exitCode == 0 else {
+            DiagnosticLog.shared.record(.gitStatusFailed(statusOutput.exitCode))
+            return []
+        }
+
+        var entries = parsePorcelainV2(statusOutput.stdout)
+
+        async let stagedCounts = numstat(at: path, cached: true)
+        async let unstagedCounts = numstat(at: path, cached: false)
+        let (staged, unstaged) = await (stagedCounts, unstagedCounts)
+
+        for index in entries.indices {
+            switch entries[index].group {
+            case .staged:
+                if let counts = staged[entries[index].path] {
+                    entries[index].additions = counts.additions
+                    entries[index].deletions = counts.deletions
+                }
+            case .unstaged:
+                if let counts = unstaged[entries[index].path] {
+                    entries[index].additions = counts.additions
+                    entries[index].deletions = counts.deletions
+                }
+            case .untracked:
+                if let counts = await untrackedCount(at: path, file: entries[index].path) {
+                    entries[index].additions = counts.additions
+                    entries[index].deletions = counts.deletions
+                }
+            }
+
+            let absolutePath = (path as NSString).appendingPathComponent(entries[index].path)
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: absolutePath) {
+                entries[index].fileSizeBytes = (attributes[.size] as? NSNumber)?.int64Value
+                entries[index].modificationDate = attributes[.modificationDate] as? Date
+            }
+        }
+
+        return entries
+    }
+
+    private static func parsePorcelainV2(_ output: String) -> [DiffFileEntry] {
+        var entries: [DiffFileEntry] = []
+
+        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            if line.hasPrefix("1 ") {
+                // 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
+                let fields = line.split(separator: " ", maxSplits: 8, omittingEmptySubsequences: true)
+                guard fields.count == 9 else { continue }
+                let xy = fields[1]
+                let filePath = String(fields[8])
+                appendOrdinary(xy: xy, path: filePath, into: &entries)
+            } else if line.hasPrefix("2 ") {
+                // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X-score> <path>\t<origPath>
+                let fields = line.split(separator: " ", maxSplits: 9, omittingEmptySubsequences: true)
+                guard fields.count == 10 else { continue }
+                let xy = fields[1]
+                let pathsField = fields[9]
+                let parts = pathsField.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: true)
+                guard let newPath = parts.first else { continue }
+                let origPath = parts.count > 1 ? String(parts[1]) : ""
+                appendRenameOrCopy(xy: xy, path: String(newPath), origPath: origPath, into: &entries)
+            } else if line.hasPrefix("u ") {
+                // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
+                let fields = line.split(separator: " ", maxSplits: 10, omittingEmptySubsequences: true)
+                guard fields.count == 11 else { continue }
+                let filePath = String(fields[10])
+                entries.append(DiffFileEntry(path: filePath, group: .staged, status: .unmerged))
+                entries.append(DiffFileEntry(path: filePath, group: .unstaged, status: .unmerged))
+            } else if line.hasPrefix("? ") {
+                let filePath = String(line.dropFirst(2))
+                entries.append(DiffFileEntry(path: filePath, group: .untracked, status: .untracked))
+            }
+            // "!" (ignored) sengaja tidak ditangani — git status default tidak menyertakannya.
+        }
+
+        return entries
+    }
+
+    private static func appendOrdinary(xy: Substring, path: String, into entries: inout [DiffFileEntry]) {
+        guard xy.count == 2 else { return }
+        let x = xy[xy.startIndex]
+        let y = xy[xy.index(after: xy.startIndex)]
+        if x != ".", let status = statusFromCode(x) {
+            entries.append(DiffFileEntry(path: path, group: .staged, status: status))
+        }
+        if y != ".", let status = statusFromCode(y) {
+            entries.append(DiffFileEntry(path: path, group: .unstaged, status: status))
+        }
+    }
+
+    private static func appendRenameOrCopy(xy: Substring, path: String, origPath: String, into entries: inout [DiffFileEntry]) {
+        guard xy.count == 2 else { return }
+        let x = xy[xy.startIndex]
+        let y = xy[xy.index(after: xy.startIndex)]
+        let stagedStatus: DiffFileStatus = (x == "C") ? .copied(from: origPath) : .renamed(from: origPath)
+        if x != "." {
+            entries.append(DiffFileEntry(path: path, group: .staged, status: stagedStatus))
+        }
+        if y != ".", let status = statusFromCode(y) {
+            entries.append(DiffFileEntry(path: path, group: .unstaged, status: status))
+        }
+    }
+
+    private static func statusFromCode(_ code: Character) -> DiffFileStatus? {
+        switch code {
+        case "M": return .modified
+        case "A": return .added
+        case "D": return .deleted
+        case "T": return .typeChanged
+        case "U": return .unmerged
+        default: return nil
+        }
+    }
+
+    // MARK: - Jumlah baris (numstat)
+
+    private struct LineCounts {
+        let additions: Int?
+        let deletions: Int?
+    }
+
+    private static func numstat(at path: String, cached: Bool) async -> [String: LineCounts] {
+        var args = ["--no-optional-locks", "diff", "--numstat"]
+        if cached { args.insert("--cached", at: 2) }
+        let output = await GitProcess.run(args, at: path)
+        guard output.exitCode == 0 else { return [:] }
+        return parseNumstat(output.stdout)
+    }
+
+    private static func parseNumstat(_ output: String) -> [String: LineCounts] {
+        var result: [String: LineCounts] = [:]
+        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+            guard fields.count >= 3 else { continue }
+            let added = Int(fields[0])
+            let deleted = Int(fields[1])
+            let filePath = resolveNumstatPath(fields[2...])
+            result[filePath] = LineCounts(additions: added, deletions: deleted)
+        }
+        return result
+    }
+
+    /// Nama file di `--numstat` bisa berupa `old => new` (umum) atau, untuk
+    /// path dengan rename besar, dua kolom terpisah `old\tnew`.
+    private static func resolveNumstatPath(_ fields: ArraySlice<Substring>) -> String {
+        if fields.count > 1 {
+            return String(fields.last!)
+        }
+        let raw = String(fields.first ?? "")
+        if let range = raw.range(of: " => ") {
+            let before = raw[raw.startIndex..<range.lowerBound]
+            let after = raw[range.upperBound...]
+            if let braceOpen = before.lastIndex(of: "{"), let braceClose = after.firstIndex(of: "}") {
+                let prefix = before[before.startIndex..<braceOpen]
+                let suffix = after[after.index(after: braceClose)...]
+                let middle = after[after.startIndex..<braceClose]
+                return "\(prefix)\(middle)\(suffix)"
+            }
+            return String(after)
+        }
+        return raw
+    }
+
+    private static func untrackedCount(at path: String, file: String) async -> LineCounts? {
+        let output = await GitProcess.run(["--no-optional-locks", "diff", "--no-index", "--numstat", "--", "/dev/null", file], at: path)
+        // `git diff --no-index` keluar dengan status 1 saat berbeda — itu normal, bukan error.
+        guard output.exitCode == 0 || output.exitCode == 1 else { return nil }
+        let parsed = parseNumstat(output.stdout)
+        return parsed.values.first
+    }
+
+    // MARK: - Isi diff per file
+
+    static func fileDiff(at repoPath: String, for entry: DiffFileEntry) async -> FileDiff {
+        let output: GitProcess.Output
+        switch entry.group {
+        case .staged:
+            output = await GitProcess.run(["--no-optional-locks", "diff", "--cached", "--", entry.path], at: repoPath)
+        case .unstaged:
+            output = await GitProcess.run(["--no-optional-locks", "diff", "--", entry.path], at: repoPath)
+        case .untracked:
+            output = await GitProcess.run(["--no-optional-locks", "diff", "--no-index", "--", "/dev/null", entry.path], at: repoPath)
+        }
+
+        if output.stdout.contains("Binary files") {
+            return FileDiff(entry: entry, hunks: [], isBinary: true, rawText: output.stdout)
+        }
+
+        return FileDiff(entry: entry, hunks: parseUnifiedDiff(output.stdout), isBinary: false, rawText: output.stdout)
+    }
+
+    static func fileDiff(at repoPath: String, against branch: String, for entry: DiffFileEntry) async -> FileDiff {
+        let output = await GitProcess.run(
+            ["--no-optional-locks", "diff", "--no-ext-diff", branch, "--", entry.path],
+            at: repoPath
+        )
+        if output.stdout.contains("Binary files") {
+            return FileDiff(entry: entry, hunks: [], isBinary: true, rawText: output.stdout)
+        }
+        return FileDiff(entry: entry, hunks: parseUnifiedDiff(output.stdout), isBinary: false, rawText: output.stdout)
+    }
+
+    // MARK: - "Salin perintah"
+
+    /// Perintah untuk tombol "Salin Perintah" (bagian 17a apps-spec.md):
+    /// kebalikan dari status saat ini — stage untuk unstaged/untracked,
+    /// unstage untuk staged. Apps tidak pernah menjalankan ini sendiri,
+    /// hanya menyalin ke clipboard untuk dijalankan manual di terminal.
+    static func toggleStageCommand(for entry: DiffFileEntry) -> String {
+        let quotedPath = shellQuoted(entry.path)
+        switch entry.group {
+        case .staged:
+            return "git restore --staged \(quotedPath)"
+        case .unstaged, .untracked:
+            return "git add \(quotedPath)"
+        }
+    }
+
+    private static func shellQuoted(_ path: String) -> String {
+        "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private static func parseUnifiedDiff(_ text: String) -> [DiffHunk] {
+        var hunks: [DiffHunk] = []
+        var currentHeader: String?
+        var currentLines: [DiffLine] = []
+        var oldLine = 0
+        var newLine = 0
+
+        func flushHunk() {
+            if let header = currentHeader {
+                hunks.append(DiffHunk(header: header, lines: currentLines))
+            }
+            currentHeader = nil
+            currentLines = []
+        }
+
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(rawLine)
+            if line.hasPrefix("@@") {
+                flushHunk()
+                currentHeader = line
+                let (o, n) = parseHunkHeader(line)
+                oldLine = o
+                newLine = n
+            } else if currentHeader != nil {
+                if line.hasPrefix("+") {
+                    currentLines.append(DiffLine(kind: .addition, oldLineNumber: nil, newLineNumber: newLine, text: String(line.dropFirst())))
+                    newLine += 1
+                } else if line.hasPrefix("-") {
+                    currentLines.append(DiffLine(kind: .deletion, oldLineNumber: oldLine, newLineNumber: nil, text: String(line.dropFirst())))
+                    oldLine += 1
+                } else if line.hasPrefix("\\") {
+                    // "\ No newline at end of file" — diabaikan, tidak memengaruhi nomor baris.
+                    continue
+                } else {
+                    let text = line.isEmpty ? "" : String(line.dropFirst())
+                    currentLines.append(DiffLine(kind: .context, oldLineNumber: oldLine, newLineNumber: newLine, text: text))
+                    oldLine += 1
+                    newLine += 1
+                }
+            }
+        }
+        flushHunk()
+        return hunks
+    }
+
+    private static func parseHunkHeader(_ header: String) -> (old: Int, new: Int) {
+        // Format: "@@ -<oldStart>[,<oldCount>] +<newStart>[,<newCount>] @@ ..."
+        let scanner = Scanner(string: header)
+        _ = scanner.scanUpToString("-")
+        _ = scanner.scanString("-")
+        let oldStart = scanner.scanInt() ?? 1
+        _ = scanner.scanUpToString("+")
+        _ = scanner.scanString("+")
+        let newStart = scanner.scanInt() ?? 1
+        return (oldStart, newStart)
+    }
+}
