@@ -91,9 +91,11 @@ Sedang berjalan. Catatan desain dan verifikasi per langkah ada di bawah:
   - Pane dengan path yang sudah dipindah/dihapus menampilkan peringatan dan tombol cari ulang folder.
   - Susunan pane, repo, pane aktif, divider, dan frame jendela tetap dipulihkan melalui state JSON/autosave yang sudah ada.
   - Verifikasi: typecheck Swift berhasil; build penuh dan smoke test restart menunggu Xcode GUI.
-- [ ] **15. Worktree (dua worktree repo yang sama berdampingan)** *(dukungan model siap; verifikasi build/runtime pending)*
-  - `Repo.existsOnDisk` menerima `.git` sebagai file pointer worktree dan `AppStateStore.addRepo(path:)` membedakan worktree berdasarkan path, sehingga dua worktree dapat memperoleh sesi/repo terpisah.
-  - Verifikasi executable sementara untuk dua worktree `.git` file dan identitas path berhasil; build penuh dan smoke test dua pane menunggu Xcode GUI.
+- [ ] **15. Worktree (dua branch repo yang sama berdampingan)** *(aksi buka branch dan worktree terkelola diimplementasikan; verifikasi build/runtime pending)*
+  - Pane dapat membuka branch lokal lain di worktree terpisah dari menu pane; sesi terminal, diff, dan viewer tetap terisolasi per worktree.
+  - Worktree baru disimpan di `~/Library/Application Support/Gridline/Worktrees/`; menutup pane tidak menghapus folder atau perubahan pengguna.
+  - Pane worktree menyimpan referensi repo sumber dan branch. Jika foldernya hilang, aksi **Pilih Branch Lagi…** membuka pemilih dari repo sumber dan mengganti pane yang sama; metadata worktree Git stale dipruning sebelum pembuatan ulang.
+  - Verifikasi executable model untuk identitas worktree sudah berhasil; build penuh dan smoke test dua pane masih pending.
 
 Permintaan tambahan 2026-10-24 (di luar 21 checklist): menu **Layout** menggabungkan tambah pane, preset, dan hitungan; menu **•••** per pane menggabungkan maksimalkan, mode terminal, tutup repo, dan tutup pane. Pane kosong memakai tombol utama **Buka Repo…** dan menu **Repo Terakhir**. Tutup pane menghapus slot, memilih pane tetangga bila pane aktif ditutup, melindungi pane terakhir, dan membiarkan repo beserta sesi terminalnya tetap hidup. Typecheck seluruh source Swift berhasil; build GUI dan smoke test masih pending.
 
@@ -132,7 +134,7 @@ Sedang berjalan:
 
 Hal-hal berikut **sengaja** disederhanakan di M1–M2 awal karena bergantung pada milestone berikutnya. Jangan dianggap bug kecuali diminta memperbaikinya di luar urutan milestone:
 
-1. **Overflow menu untuk tab yang tidak muat** (bagian 4, D26) — `TerminalAreaView` dan rencana `TopAreaView` belum punya menu overflow, hanya `HStack` biasa yang bisa terpotong di layar sempit. Ditunda ke M4 bersama Quick Switcher ⌘P.
+1. **Overflow menu untuk tab yang tidak muat** — `OpenTabsView` menyediakan pencarian/pilihan tab file, dan `TerminalAreaView` kini beralih ke menu tab saat strip tidak cukup lebar.
 2. **`RepoPaneView`/`ContentView` memakai satu repo aktif global** — sudah digeneralisasi pada M3 langkah 10 menjadi slot `PaneLayout`; registry sesi tetap per repo.
 3. **SwiftTerm dipin ke versi 1.20.0** (bukan `upToNextMajorVersion`) di `project.pbxproj` karena versi 1.99.x butuh `SwiftTermBuildInfoPlugin` yang perlu persetujuan interaktif Xcode ("Trust & Enable") dan `xcodebuild` CLI perlu flag `-skipPackagePluginValidation`. Jangan naikkan versi tanpa mengecek ulang apakah plugin masih dibutuhkan.
 4. **`DEVELOPMENT_TEAM = ""`** di `project.pbxproj` ditambahkan otomatis oleh Xcode GUI (bukan oleh agent) — perlu diisi sebelum code signing Developer ID untuk distribusi (D16).
@@ -174,3 +176,5 @@ Permintaan tambahan 2026-10-24: setelah menambah tab terminal, input langsung ma
 Permintaan tambahan 2026-10-24: terminal memakai latar hitam, teks terang, palet ANSI berkontras tinggi, dan warna folder kerja hijau pada prompt zsh bawaan. Palet 16 warna dipasang lewat SwiftTerm; ANSI 256/truecolor tetap ditangani engine, sedangkan preferensi prompt dan `LSCOLORS` milik pengguna dipertahankan.
 
 Permintaan tambahan: menu **Repo Terakhir** punya aksi **Clear Recent** dengan copy Indonesia dan English. Riwayat tiga repo terakhir disimpan terpisah dari daftar repo tersimpan; clear hanya mengosongkan shortcut recent dan tidak menghapus repo, pane aktif, atau berkas di disk. State lama dimigrasikan dengan memakai tiga repo terakhir dari daftar tersimpan.
+
+Permintaan tambahan 2026-10-24: tinjauan performa menghilangkan proses Git per file untracked, mengecualikan `.git` dari FSEvents, menyatukan debounce ke latency native, menghentikan watcher repo/viewer saat pane tidak terlihat tanpa mematikan sesi terminal, serta melazy-render baris diff dan menghitung filter file sekali per body. Daftar branch pada pemilih Local Changes juga memiliki pencarian inline. Build dan verifikasi GUI untuk perubahan ini masih pending.

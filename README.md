@@ -8,11 +8,15 @@ Gridline is a native macOS workspace for reviewing and working across several Gi
 
 - Arrange up to four repositories in a resizable pane grid.
 - Review staged, unstaged, and untracked changes, or compare the working tree with a local branch.
+- Compare two local branches and open another branch beside the current repository in a separate Git worktree.
+- Search branches while choosing a comparison or worktree; restore a missing worktree by choosing a branch from its source repository.
 - Open files in a read-only viewer, including paths selected from terminal output with Command-click.
 - Run independent shell sessions in terminal tabs. ANSI 16/256-color and truecolor output are supported.
 - Switch between repositories and open files with the quick switcher.
 - Keep repository layout and recent repository shortcuts between launches.
 - Use the interface in Indonesian or English, following the macOS language preference.
+
+Gridline pauses file and diff watchers for panes that are not visible while keeping terminal sessions alive. Large diffs and file lists load incrementally to keep scrolling responsive.
 
 Gridline's Git status and diff views are read-only. Actions such as staging changes are copied as commands for the user to run in the terminal.
 

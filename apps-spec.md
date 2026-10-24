@@ -524,7 +524,7 @@ Semua fitur di bagian ini masuk versi awal:
 
 ## 17b. Fitur Lanjutan (Masuk Versi Awal)
 
-- **Worktree**: repo bisa dibuka sebagai worktree. Dua worktree dari repo yang sama bisa berdampingan di pane masing-masing, dengan diff dan sesi terminal sendiri. Daftar repo tersimpan menampilkan worktree sebagai item terpisah dengan nama branch-nya.
+- **Worktree**: repo bisa dibuka sebagai worktree. Menu pane menyediakan **Buka Branch di Pane Baru** untuk memilih branch lokal dan membuka atau membuat worktree terisolasi. Dua worktree dari repo yang sama bisa berdampingan di pane masing-masing, dengan diff dan sesi terminal sendiri. Daftar repo tersimpan menampilkan worktree sebagai item terpisah dengan nama repo dan branch. Worktree baru dikelola di `~/Library/Application Support/Gridline/Worktrees/`; menutup pane tidak menghapusnya.
 - **Viewer sebagai panel samping diff**: tombol di tab viewer mengubah viewer dari tab di area atas menjadi panel samping diff. Default tetap tab, dan pilihan ini disimpan per pane.
 
 ## 18. Pertanyaan yang Masih Terbuka
