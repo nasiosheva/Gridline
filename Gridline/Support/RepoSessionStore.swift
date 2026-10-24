@@ -36,6 +36,12 @@ final class RepoSessionStore: ObservableObject {
         sessions[repo.id]
     }
 
+    func terminateSession(for repo: Repo) {
+        guard let session = sessions.removeValue(forKey: repo.id) else { return }
+        attentionObservers[repo.id] = nil
+        session.tabs.forEach { $0.terminate() }
+    }
+
     func terminateAllProcesses() {
         sessions.values.forEach { session in
             session.tabs.forEach { $0.terminate() }

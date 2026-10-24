@@ -8,30 +8,6 @@
 
 import Foundation
 
-enum PaneLayoutPreset: Int, CaseIterable, Identifiable, Codable {
-    case onePane = 1
-    case twoColumns = 2
-    case fourGrid = 4
-
-    var id: Int { rawValue }
-
-    var title: LocalizedStringResource {
-        switch self {
-        case .onePane: L10n.Layout.onePane
-        case .twoColumns: L10n.Layout.twoColumns
-        case .fourGrid: L10n.Layout.fourGrid
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .onePane: "rectangle"
-        case .twoColumns: "rectangle.split.2x1"
-        case .fourGrid: "square.grid.2x2"
-        }
-    }
-}
-
 enum PaneFocusDirection {
     case left
     case right
@@ -40,9 +16,41 @@ enum PaneFocusDirection {
 }
 
 enum PaneDividerRole: Hashable {
-    case topColumn
-    case bottomColumn
-    case row
+    case columns(row: Int)
+    case rows
+
+    var storageKey: String {
+        switch self {
+        case .columns(let row): "columns.\(row)"
+        case .rows: "rows"
+        }
+    }
+}
+
+struct PaneGridShape {
+    let columnCount: Int
+    let rowLengths: [Int]
+
+    var rowCount: Int { rowLengths.count }
+
+    init(paneCount: Int) {
+        let count = max(1, paneCount)
+        columnCount = Int(ceil(sqrt(Double(count))))
+        let rows = Int(ceil(Double(count) / Double(columnCount)))
+        let baseRowLength = count / rows
+        let longerRowCount = count % rows
+        rowLengths = (0..<rows).map { row in
+            baseRowLength + (row < longerRowCount ? 1 : 0)
+        }
+    }
+
+    var positions: [(row: Double, column: Double)] {
+        rowLengths.enumerated().flatMap { row, length in
+            (0..<length).map { column in
+                (Double(row), Double(column))
+            }
+        }
+    }
 }
 
 struct PaneSlot: Identifiable, Codable, Equatable {
@@ -90,44 +98,49 @@ struct PaneSlot: Identifiable, Codable, Equatable {
 }
 
 struct PaneLayout: Codable, Equatable {
-    static let maximumPaneCount = 4
-
     var slots: [PaneSlot]
+    var displayPaneCount: Int
     var activePaneID: UUID
     var topColumnFraction: Double
     var bottomColumnFraction: Double
     var rowFraction: Double
+    var gridDividerFractions: [String: [Double]]
     var maximizedPaneID: UUID?
     var terminalOnlyPaneID: UUID?
 
     private enum CodingKeys: String, CodingKey {
         case slots
+        case displayPaneCount
         case activePaneID
         case topColumnFraction
         case bottomColumnFraction
         case rowFraction
+        case dividerFractions
         case maximizedPaneID
         case terminalOnlyPaneID
     }
 
     init(
         slots: [PaneSlot] = [PaneSlot(), PaneSlot()],
+        displayPaneCount: Int? = nil,
         activePaneID: UUID? = nil,
         topColumnFraction: Double = 0.5,
         bottomColumnFraction: Double = 0.5,
         rowFraction: Double = 0.5,
+        gridDividerFractions: [String: [Double]] = [:],
         maximizedPaneID: UUID? = nil,
         terminalOnlyPaneID: UUID? = nil
     ) {
-        let normalizedSlots = Array(slots.prefix(Self.maximumPaneCount))
-        let resolvedSlots = normalizedSlots.isEmpty ? [PaneSlot()] : normalizedSlots
+        let resolvedSlots = slots.isEmpty ? [PaneSlot()] : slots
         self.slots = resolvedSlots
+        self.displayPaneCount = min(max(1, displayPaneCount ?? resolvedSlots.count), resolvedSlots.count)
         self.activePaneID = activePaneID.flatMap { candidate in
             resolvedSlots.contains(where: { $0.id == candidate }) ? candidate : nil
         } ?? resolvedSlots[0].id
         self.topColumnFraction = topColumnFraction.clampedFraction
         self.bottomColumnFraction = bottomColumnFraction.clampedFraction
         self.rowFraction = rowFraction.clampedFraction
+        self.gridDividerFractions = gridDividerFractions.mapValues { $0.map(\.clampedFraction) }
         self.maximizedPaneID = resolvedSlots.contains(where: { $0.id == maximizedPaneID }) ? maximizedPaneID : nil
         self.terminalOnlyPaneID = resolvedSlots.contains(where: { $0.id == terminalOnlyPaneID })
             ? terminalOnlyPaneID
@@ -139,12 +152,15 @@ struct PaneLayout: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedSlots = try container.decodeIfPresent([PaneSlot].self, forKey: .slots) ?? []
         self.init(
-            slots: try container.decodeIfPresent([PaneSlot].self, forKey: .slots) ?? [],
+            slots: decodedSlots,
+            displayPaneCount: try container.decodeIfPresent(Int.self, forKey: .displayPaneCount) ?? decodedSlots.count,
             activePaneID: try container.decodeIfPresent(UUID.self, forKey: .activePaneID),
             topColumnFraction: try container.decodeIfPresent(Double.self, forKey: .topColumnFraction) ?? 0.5,
             bottomColumnFraction: try container.decodeIfPresent(Double.self, forKey: .bottomColumnFraction) ?? 0.5,
             rowFraction: try container.decodeIfPresent(Double.self, forKey: .rowFraction) ?? 0.5,
+            gridDividerFractions: try container.decodeIfPresent([String: [Double]].self, forKey: .dividerFractions) ?? [:],
             maximizedPaneID: try container.decodeIfPresent(UUID.self, forKey: .maximizedPaneID),
             terminalOnlyPaneID: try container.decodeIfPresent(UUID.self, forKey: .terminalOnlyPaneID)
         )
@@ -153,10 +169,12 @@ struct PaneLayout: Codable, Equatable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(slots, forKey: .slots)
+        try container.encode(displayPaneCount, forKey: .displayPaneCount)
         try container.encode(activePaneID, forKey: .activePaneID)
         try container.encode(topColumnFraction, forKey: .topColumnFraction)
         try container.encode(bottomColumnFraction, forKey: .bottomColumnFraction)
         try container.encode(rowFraction, forKey: .rowFraction)
+        try container.encode(gridDividerFractions, forKey: .dividerFractions)
         try container.encodeIfPresent(maximizedPaneID, forKey: .maximizedPaneID)
         try container.encodeIfPresent(terminalOnlyPaneID, forKey: .terminalOnlyPaneID)
     }
@@ -170,29 +188,31 @@ struct PaneLayout: Codable, Equatable {
         slots.first(where: { $0.id == activePaneID }) ?? slots[0]
     }
 
-    mutating func setPreset(_ preset: PaneLayoutPreset) {
-        let desiredCount = preset.rawValue
+    var displayedSlots: [PaneSlot] {
+        let visibleCount = min(displayPaneCount, slots.count)
+        var visibleSlots = Array(slots.prefix(visibleCount))
+        let currentSlot = activeSlot
+        if !visibleSlots.contains(where: { $0.id == currentSlot.id }), !visibleSlots.isEmpty {
+            visibleSlots[visibleSlots.count - 1] = currentSlot
+        }
+        return visibleSlots
+    }
+
+    mutating func setDisplayPaneCount(_ desiredCount: Int) {
+        let desiredCount = max(1, desiredCount)
         if slots.count < desiredCount {
             slots.append(contentsOf: (slots.count..<desiredCount).map { _ in PaneSlot() })
-        } else if slots.count > desiredCount {
-            var retainedSlots = Array(slots.prefix(desiredCount))
-            if !retainedSlots.contains(where: { $0.id == activePaneID }),
-               let activeSlot = slots.first(where: { $0.id == activePaneID }) {
-                retainedSlots[retainedSlots.count - 1] = activeSlot
-            }
-            slots = retainedSlots
         }
-        if !slots.contains(where: { $0.id == activePaneID }) {
-            activePaneID = slots.last!.id
-        }
+        displayPaneCount = desiredCount
+        maximizedPaneID = nil
         normalizeTransientModes()
     }
 
     @discardableResult
-    mutating func addPane() -> UUID? {
-        guard slots.count < Self.maximumPaneCount else { return nil }
+    mutating func addPane() -> UUID {
         let slot = PaneSlot()
         slots.append(slot)
+        displayPaneCount = slots.count
         activePaneID = slot.id
         return slot.id
     }
@@ -203,6 +223,7 @@ struct PaneLayout: Codable, Equatable {
               let index = slots.firstIndex(where: { $0.id == paneID }) else { return false }
 
         slots.remove(at: index)
+        displayPaneCount = min(displayPaneCount, slots.count)
         if activePaneID == paneID {
             activePaneID = slots[min(index, slots.count - 1)].id
         }
@@ -222,8 +243,9 @@ struct PaneLayout: Codable, Equatable {
             return existing.id
         }
 
-        if preferNewPane, let newPaneID = addPane(),
-           let index = slots.firstIndex(where: { $0.id == newPaneID }) {
+        if preferNewPane {
+            let newPaneID = addPane()
+            guard let index = slots.firstIndex(where: { $0.id == newPaneID }) else { return newPaneID }
             slots[index].repoID = repoID
             return newPaneID
         }
@@ -240,8 +262,8 @@ struct PaneLayout: Codable, Equatable {
             return slots[emptyIndex].id
         }
 
-        if let newPaneID = addPane(),
-           let index = slots.firstIndex(where: { $0.id == newPaneID }) {
+        let newPaneID = addPane()
+        if let index = slots.firstIndex(where: { $0.id == newPaneID }) {
             slots[index].repoID = repoID
             return newPaneID
         }
@@ -273,6 +295,39 @@ struct PaneLayout: Codable, Equatable {
             activePaneID = paneID
         } else {
             _ = assign(repoID: repoID)
+        }
+    }
+
+    mutating func selectRepo(_ repoID: UUID, in paneID: UUID) {
+        guard let paneIndex = slots.firstIndex(where: { $0.id == paneID }) else { return }
+        let preservesMaximizedMode = maximizedPaneID == paneID
+        let preservesTerminalOnlyMode = terminalOnlyPaneID == paneID
+
+        if let existingIndex = slots.firstIndex(where: { $0.repoID == repoID }) {
+            guard existingIndex != paneIndex else {
+                activePaneID = paneID
+                return
+            }
+            slots.swapAt(paneIndex, existingIndex)
+            activePaneID = slots[paneIndex].id
+        } else {
+            if slots[paneIndex].repoID == nil {
+                slots[paneIndex].repoID = repoID
+                activePaneID = paneID
+            } else {
+                let previousSlot = slots.remove(at: paneIndex)
+                let selectedSlot = PaneSlot(repoID: repoID)
+                slots.insert(selectedSlot, at: paneIndex)
+                slots.append(previousSlot)
+                activePaneID = selectedSlot.id
+            }
+        }
+
+        if preservesMaximizedMode {
+            maximizedPaneID = activePaneID
+        }
+        if preservesTerminalOnlyMode {
+            terminalOnlyPaneID = activePaneID
         }
     }
 
@@ -315,13 +370,15 @@ struct PaneLayout: Codable, Equatable {
     }
 
     mutating func focusPane(at index: Int) {
-        guard slots.indices.contains(index) else { return }
-        activePaneID = slots[index].id
+        let visibleSlots = displayedSlots
+        guard visibleSlots.indices.contains(index) else { return }
+        activePaneID = visibleSlots[index].id
     }
 
     mutating func focus(_ direction: PaneFocusDirection) {
-        guard let currentIndex = slots.firstIndex(where: { $0.id == activePaneID }) else { return }
-        let positions = gridPositions
+        let visibleSlots = displayedSlots
+        guard let currentIndex = visibleSlots.firstIndex(where: { $0.id == activePaneID }) else { return }
+        let positions = PaneGridShape(paneCount: visibleSlots.count).positions
         let current = positions[currentIndex]
 
         let candidates = positions.enumerated().filter { index, position in
@@ -343,7 +400,7 @@ struct PaneLayout: Codable, Equatable {
                 < distance(from: current, to: rhs.element, direction: direction)
         }
         if let target {
-            activePaneID = slots[target.offset].id
+            activePaneID = visibleSlots[target.offset].id
         }
     }
 
@@ -357,17 +414,50 @@ struct PaneLayout: Codable, Equatable {
         slots[index].viewerAsSidePanel = isEnabled
     }
 
-    private var gridPositions: [(row: Double, column: Double)] {
-        switch slots.count {
-        case 1:
-            [(0, 0)]
-        case 2:
-            [(0, 0), (0, 1)]
-        case 3:
-            [(0, 0), (0, 1), (1, 0.5)]
-        default:
-            [(0, 0), (0, 1), (1, 0), (1, 1)]
+    func dividerFractions(for paneCount: Int) -> [PaneDividerRole: [Double]] {
+        let shape = PaneGridShape(paneCount: paneCount)
+        var result: [PaneDividerRole: [Double]] = [:]
+        for (row, length) in shape.rowLengths.enumerated() where length > 1 {
+            let role = PaneDividerRole.columns(row: row)
+            if let saved = gridDividerFractions[role.storageKey], saved.count == length - 1 {
+                result[role] = saved
+            } else if length == 2 {
+                result[role] = [row == 0 ? topColumnFraction : bottomColumnFraction]
+            } else {
+                result[role] = evenlySpacedFractions(dividerCount: length - 1)
+            }
         }
+        if shape.rowCount > 1 {
+            let role = PaneDividerRole.rows
+            if let saved = gridDividerFractions[role.storageKey], saved.count == shape.rowCount - 1 {
+                result[role] = saved
+            } else if shape.rowCount == 2 {
+                result[role] = [rowFraction]
+            } else {
+                result[role] = evenlySpacedFractions(dividerCount: shape.rowCount - 1)
+            }
+        }
+        return result
+    }
+
+    mutating func setDividerFractions(_ fractions: [Double], for role: PaneDividerRole) {
+        let clamped = fractions.map(\.clampedFraction)
+        guard gridDividerFractions[role.storageKey] != clamped else { return }
+        gridDividerFractions[role.storageKey] = clamped
+        switch role {
+        case .columns(row: 0) where clamped.count == 1:
+            topColumnFraction = clamped[0]
+        case .columns(row: 1) where clamped.count == 1:
+            bottomColumnFraction = clamped[0]
+        case .rows where clamped.count == 1:
+            rowFraction = clamped[0]
+        default:
+            break
+        }
+    }
+
+    private func evenlySpacedFractions(dividerCount: Int) -> [Double] {
+        (1...dividerCount).map { Double($0) / Double(dividerCount + 1) }
     }
 
     private func distance(
@@ -379,7 +469,8 @@ struct PaneLayout: Codable, Equatable {
         case .left, .right:
             abs(source.column - target.column)
         case .up, .down:
-            abs(source.row - target.row) * 10 + abs(source.column - target.column)
+            abs(source.row - target.row) * Double(Int(ceil(sqrt(Double(slots.count)))) + 1)
+                + abs(source.column - target.column)
         }
     }
 }

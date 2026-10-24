@@ -19,19 +19,30 @@ struct ContentView: View {
     @State private var tccWarningPath: String?
     @State private var closedRepoToast: ClosedRepoToast?
     @State private var pendingRepoClose: PendingRepoClose?
+    @State private var batchCloseQueue: [BatchCloseCandidate] = []
+    @State private var batchCloseIndex = 0
+    @State private var pendingBatchClose: PendingBatchClose?
+    @State private var pendingLayoutChange: PendingLayoutChange?
     @State private var isConfirmingQuit = false
     @State private var diagnosticsExportError: String?
     @State private var activeSheet: ContentSheet?
 
     var body: some View {
+        diagnosticsAlert
+    }
+
+    private var baseContent: some View {
         VStack(spacing: 0) {
             GridToolbarView(
-                paneCount: layout.slots.count,
+                paneCount: visiblePaneSlots.count,
+                paneCountLimit: appState.paneCountLimit,
+                paneCountChoices: Array(1...appState.paneCountLimit),
+                canAddPane: appState.canAddPane,
                 attentionCount: attentionCount,
-                activePreset: activePreset,
+                selectedPaneCount: layout.displayPaneCount,
                 onOpenRepo: openRepo,
                 onAddPane: appState.addPane,
-                onSelectPreset: appState.setLayoutPreset
+                onSelectPaneCount: requestPaneCount
             )
             Divider()
             grid
@@ -54,16 +65,11 @@ struct ContentView: View {
                 }
             }
         }
-        .onAppear {
-            diffStoreRegistry.onWorktreeBaseBranchConsumed = { repoID in
-                appState.consumeWorktreeBaseBranch(for: repoID)
-            }
-            diffStoreRegistry.onComparisonSelectionChanged = { repoID, selection in
-                appState.setDiffComparisonSelection(selection, for: repoID)
-            }
-            updateStoreVisibility(refreshExistingDiffStores: true)
-            clearAttention(for: layout.activePaneID)
-        }
+    }
+
+    private var lifecycleContent: some View {
+        baseContent
+        .onAppear(perform: configureInitialState)
         .onChange(of: paneRepoIDs) { _, _ in
             updateStoreVisibility()
         }
@@ -78,6 +84,12 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gridlineCloseActiveRepo)) { _ in
             closeRepo(in: layout.activePaneID)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gridlineCloseAllRepositories)) { _ in
+            closeAllRepositoriesFromPanes()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gridlineManageRepositories)) { _ in
+            activeSheet = .repositoryManager
         }
         .onReceive(NotificationCenter.default.publisher(for: .gridlineRequestQuit)) { _ in
             requestQuit()
@@ -94,28 +106,48 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .gridlineExportDiagnostics)) { _ in
             exportDiagnostics()
         }
-        .sheet(item: $activeSheet) { sheet in
-            switch sheet {
-            case .quickSwitcher:
-                QuickSwitcherView(
-                    repos: appState.state.savedRepos,
-                    files: topAreaStoreRegistry.openFiles(for: appState.state.savedRepos),
-                    onSelectRepo: { repo in
-                        appState.openRepo(id: repo.id, in: layout.activePaneID)
-                    },
-                    onSelectFile: { file in
-                        guard let repo = appState.state.savedRepos.first(where: { $0.id == file.repoID }) else { return }
-                        appState.openRepo(id: repo.id, in: layout.activePaneID)
-                        topAreaStoreRegistry.selectFile(path: file.path, in: repo)
-                    }
-                )
-            case .shortcutHelp:
-                ShortcutHelpView()
-            case .worktreePicker(let repo, let paneID):
-                WorktreeBranchPickerView(repo: repo, replacingPaneID: paneID)
-                    .environmentObject(appState)
-            }
+    }
+
+    private var sheetContent: some View {
+        lifecycleContent
+            .sheet(item: $activeSheet, content: sheetView(for:))
+    }
+
+    @ViewBuilder
+    private func sheetView(for sheet: ContentSheet) -> some View {
+        switch sheet {
+        case .quickSwitcher:
+            QuickSwitcherView(
+                repos: appState.state.savedRepos,
+                files: topAreaStoreRegistry.openFiles(for: appState.state.savedRepos),
+                onSelectRepo: selectQuickSwitcherRepo,
+                onSelectFile: selectQuickSwitcherFile
+            )
+        case .shortcutHelp:
+            ShortcutHelpView()
+        case .repositoryManager:
+            RepositoryManagerView(
+                repos: appState.state.savedRepos,
+                onRemoveRepositories: removeSavedRepositories
+            )
+        case .worktreePicker(let repo, let paneID):
+            WorktreeBranchPickerView(repo: repo, replacingPaneID: paneID)
+                .environmentObject(appState)
         }
+    }
+
+    private func selectQuickSwitcherRepo(_ repo: Repo) {
+        appState.openRepo(id: repo.id, in: layout.activePaneID)
+    }
+
+    private func selectQuickSwitcherFile(_ file: QuickSwitcherFile) {
+        guard let repo = appState.state.savedRepos.first(where: { $0.id == file.repoID }) else { return }
+        appState.openRepo(id: repo.id, in: layout.activePaneID)
+        topAreaStoreRegistry.selectFile(path: file.path, in: repo)
+    }
+
+    private var repositoryCloseConfirmation: some View {
+        sheetContent
         .confirmationDialog(
             String(localized: L10n.Workspace.closeRepositoryTitle),
             isPresented: Binding(
@@ -133,6 +165,60 @@ struct ContentView: View {
             Text(L10n.format(L10n.Workspace.repositoryClosedMessage, Int64(pendingRepoClose?.runningProcessCount ?? 0)))
         }
         .confirmationDialog(
+            L10n.format(L10n.Workspace.batchCloseTitle, pendingBatchClose?.repo.name ?? ""),
+            isPresented: Binding(
+                get: { pendingBatchClose != nil },
+                set: { isPresented in
+                    if !isPresented, pendingBatchClose != nil {
+                        resolveBatchClose(stopAndClose: false)
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(L10n.Workspace.stopAndCloseRepository, role: .destructive) {
+                resolveBatchClose(stopAndClose: true)
+            }
+            Button(L10n.Workspace.keepRepositoryOpen, role: .cancel) {
+                resolveBatchClose(stopAndClose: false)
+            }
+        } message: {
+            Text(L10n.format(
+                L10n.Workspace.batchCloseMessage,
+                Int64(pendingBatchClose?.activeCommandCount ?? 0),
+                pendingBatchClose?.repo.name ?? ""
+            ))
+        }
+    }
+
+    private var layoutChangeConfirmation: some View {
+        repositoryCloseConfirmation
+        .confirmationDialog(
+            String(localized: L10n.Layout.hideWithActiveTerminalCommandsTitle),
+            isPresented: Binding(
+                get: { pendingLayoutChange != nil },
+                set: { if !$0 { pendingLayoutChange = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(L10n.Layout.changeLayout) {
+                guard let pendingLayoutChange else { return }
+                appState.setDisplayPaneCount(pendingLayoutChange.paneCount)
+                self.pendingLayoutChange = nil
+            }
+            .keyboardShortcut(.defaultAction)
+            Button(L10n.Common.cancel, role: .cancel) {}
+        } message: {
+            Text(L10n.format(
+                L10n.Layout.hideWithActiveTerminalCommandsMessage,
+                Int64(pendingLayoutChange?.activeCommandCount ?? 0)
+            ))
+        }
+    }
+
+    private var quitConfirmation: some View {
+        layoutChangeConfirmation
+        .confirmationDialog(
             String(localized: L10n.Workspace.quitTitle),
             isPresented: $isConfirmingQuit,
             titleVisibility: .visible
@@ -145,6 +231,10 @@ struct ContentView: View {
         } message: {
             Text(L10n.format(L10n.Workspace.quitMessage, Int64(sessionStore.runningProcessCount)))
         }
+    }
+
+    private var repositoryOpenErrorAlert: some View {
+        quitConfirmation
         .alert(String(localized: L10n.Workspace.cannotOpenRepository), isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -153,6 +243,10 @@ struct ContentView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+    }
+
+    private var folderPermissionAlert: some View {
+        repositoryOpenErrorAlert
         .alert(String(localized: L10n.Workspace.folderPermissionTitle), isPresented: Binding(
             get: { tccWarningPath != nil },
             set: { if !$0 { tccWarningPath = nil } }
@@ -164,6 +258,10 @@ struct ContentView: View {
         } message: {
             Text(L10n.format(L10n.Workspace.folderPermissionMessage, tccWarningPath ?? ""))
         }
+    }
+
+    private var diagnosticsAlert: some View {
+        folderPermissionAlert
         .alert(String(localized: L10n.Diagnostics.exportFailedTitle), isPresented: Binding(
             get: { diagnosticsExportError != nil },
             set: { if !$0 { diagnosticsExportError = nil } }
@@ -179,7 +277,7 @@ struct ContentView: View {
     }
 
     private var visiblePaneSlots: [PaneSlot] {
-        guard let maximizedPaneID = layout.maximizedPaneID else { return layout.slots }
+        guard let maximizedPaneID = layout.maximizedPaneID else { return layout.displayedSlots }
         return layout.slots.filter { $0.id == maximizedPaneID }
     }
 
@@ -196,8 +294,37 @@ struct ContentView: View {
         topAreaStoreRegistry.setVisibleRepoIDs(topAreaRepoIDs)
     }
 
-    private var activePreset: PaneLayoutPreset? {
-        PaneLayoutPreset(rawValue: layout.slots.count)
+    private func configureInitialState() {
+        diffStoreRegistry.onWorktreeBaseBranchConsumed = { repoID in
+            appState.consumeWorktreeBaseBranch(for: repoID)
+        }
+        diffStoreRegistry.onComparisonSelectionChanged = { repoID, selection in
+            appState.setDiffComparisonSelection(selection, for: repoID)
+        }
+        updateStoreVisibility(refreshExistingDiffStores: true)
+        clearAttention(for: layout.activePaneID)
+    }
+
+    private func requestPaneCount(_ paneCount: Int) {
+        guard paneCount < layout.displayPaneCount else {
+            appState.setDisplayPaneCount(paneCount)
+            return
+        }
+
+        var proposedLayout = layout
+        proposedLayout.setDisplayPaneCount(paneCount)
+        let retainedRepoIDs = Set(proposedLayout.displayedSlots.compactMap(\.repoID))
+        let hiddenRepoIDs = Set(visiblePaneSlots.compactMap(\.repoID)).subtracting(retainedRepoIDs)
+        let activeCommandCount = hiddenRepoIDs.reduce(into: 0) { total, repoID in
+            guard let repo = appState.state.savedRepos.first(where: { $0.id == repoID }) else { return }
+            total += sessionStore.existingSession(for: repo)?.activeCommandCount ?? 0
+        }
+
+        guard activeCommandCount > 0 else {
+            appState.setDisplayPaneCount(paneCount)
+            return
+        }
+        pendingLayoutChange = PendingLayoutChange(paneCount: paneCount, activeCommandCount: activeCommandCount)
     }
 
     private var attentionCount: Int {
@@ -209,38 +336,34 @@ struct ContentView: View {
         }
     }
 
+    private var availablePaneRepos: [Repo] {
+        appState.state.savedRepos.filter(\.existsOnDisk)
+    }
+
     private var grid: some View {
         GeometryReader { geometry in
-            if let maximizedPaneID = layout.maximizedPaneID,
-               let slot = layout.slots.first(where: { $0.id == maximizedPaneID }) {
-                paneContent(for: slot)
-                    .environmentObject(appState)
-                    .environmentObject(sessionStore)
-                    .environmentObject(diffStoreRegistry)
-                    .environmentObject(topAreaStoreRegistry)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                let minimumSize = PaneMetrics.minimumGridSize(for: layout.slots.count)
-                ZStack(alignment: .top) {
-                    ScrollView([.horizontal, .vertical]) {
-                        NestedPaneSplitView(
-                            items: layout.slots.map(makeGridItem),
-                            topColumnFraction: CGFloat(layout.topColumnFraction),
-                            bottomColumnFraction: CGFloat(layout.bottomColumnFraction),
-                            rowFraction: CGFloat(layout.rowFraction)
-                        ) { role, fraction in
-                            appState.setGridDividerFraction(Double(fraction), role: role)
+            let gridSlots = visiblePaneSlots
+            let minimumSize = PaneMetrics.minimumGridSize(for: gridSlots.count)
+            ZStack(alignment: .top) {
+                ScrollView([.horizontal, .vertical]) {
+                    NestedPaneSplitView(
+                        items: gridSlots.map(makeGridItem),
+                        retainedPaneIDs: layout.slots.map(\.id),
+                        dividerFractions: layout.dividerFractions(for: gridSlots.count).mapValues { fractions in
+                            fractions.map { CGFloat($0) }
                         }
-                        .frame(
-                            width: max(geometry.size.width, minimumSize.width),
-                            height: max(geometry.size.height, minimumSize.height)
-                        )
+                    ) { role, fractions in
+                        appState.setGridDividerFractions(fractions.map { Double($0) }, role: role)
                     }
+                    .frame(
+                        width: max(geometry.size.width, minimumSize.width),
+                        height: max(geometry.size.height, minimumSize.height)
+                    )
+                }
 
-                    if geometry.size.width < minimumSize.width || geometry.size.height < minimumSize.height {
-                        sizeWarning
-                            .padding(.top, 8)
-                    }
+                if geometry.size.width < minimumSize.width || geometry.size.height < minimumSize.height {
+                    sizeWarning
+                        .padding(.top, 8)
                 }
             }
         }
@@ -277,6 +400,7 @@ struct ContentView: View {
                 if repo.existsOnDisk {
                     RepoPaneView(
                         repo: repo,
+                        availableRepos: availablePaneRepos,
                         session: sessionStore.session(for: repo),
                         topFraction: Binding(
                             get: {
@@ -288,6 +412,8 @@ struct ContentView: View {
                         isMaximized: layout.maximizedPaneID == slot.id,
                         isTerminalOnly: layout.terminalOnlyPaneID == slot.id,
                         viewerAsSidePanel: slot.viewerAsSidePanel,
+                        onSelectRepo: { appState.selectRepo(id: $0, in: slot.id) },
+                        onManageRepositories: { activeSheet = .repositoryManager },
                         onClose: { closeRepo(in: slot.id) },
                         canClosePane: layout.slots.count > 1,
                         onClosePane: { appState.removePane(id: slot.id) },
@@ -320,76 +446,92 @@ struct ContentView: View {
     }
 
     private func panePlaceholder(paneID: UUID, isActive: Bool) -> some View {
-        VStack(spacing: 12) {
-            paneActionsMenu(paneID: paneID)
-            Image(systemName: "rectangle.dashed")
-                .font(.system(size: 32))
-                .foregroundStyle(isActive ? Color.accentColor : .secondary)
-            Text(L10n.Workspace.emptyPaneTitle)
-                .font(.headline)
-            Text(L10n.Pane.emptyMessage)
-                .foregroundStyle(.secondary)
-            if !appState.state.savedRepos.isEmpty {
-                Menu {
-                    if appState.recentRepositories.isEmpty {
-                        Text(L10n.Workspace.noRecentRepositories)
-                    } else {
-                        ForEach(appState.recentRepositories) { repo in
-                            Button {
-                                appState.openRepo(id: repo.id, in: paneID)
-                            } label: {
-                                Label(repo.name, systemImage: "folder")
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 12) {
+                Image(systemName: "rectangle.dashed")
+                    .font(.system(size: 32))
+                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                Text(L10n.Workspace.emptyPaneTitle)
+                    .font(.headline)
+                Text(L10n.Pane.emptyMessage)
+                    .foregroundStyle(.secondary)
+                if !appState.state.savedRepos.isEmpty {
+                    Menu {
+                        if appState.recentRepositories.isEmpty {
+                            Text(L10n.Workspace.noRecentRepositories)
+                        } else {
+                            ForEach(appState.recentRepositories) { repo in
+                                Button {
+                                    appState.openRepo(id: repo.id, in: paneID)
+                                } label: {
+                                    Label(repo.name, systemImage: "folder")
+                                }
                             }
                         }
-                    }
-                    Divider()
-                    Button(role: .destructive) {
-                        appState.clearRecentRepositories()
+                        Divider()
+                        Button(role: .destructive) {
+                            appState.clearRecentRepositories()
+                        } label: {
+                            Label(L10n.Workspace.clearRecentRepositories, systemImage: "trash")
+                        }
+                        .disabled(appState.recentRepositories.isEmpty)
                     } label: {
-                        Label(L10n.Workspace.clearRecentRepositories, systemImage: "trash")
+                        Label(L10n.Workspace.recentRepositories, systemImage: "clock.arrow.circlepath")
                     }
-                    .disabled(appState.recentRepositories.isEmpty)
-                } label: {
-                    Label(L10n.Workspace.recentRepositories, systemImage: "clock.arrow.circlepath")
+                }
+                Button(L10n.Workspace.openRepository) {
+                    appState.focusPane(id: paneID)
+                    openRepo()
                 }
             }
-            Button(L10n.Workspace.openRepository) {
-                appState.focusPane(id: paneID)
-                openRepo()
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            closePaneButton(paneID)
+                .padding(8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
     }
 
     private func missingRepoPlaceholder(repo: Repo, paneID: UUID) -> some View {
-        VStack(spacing: 12) {
-            paneActionsMenu(paneID: paneID)
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 32))
-                .foregroundStyle(.orange)
-            Text(L10n.Workspace.missingRepository)
-                .font(.headline)
-            Text(repo.path)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            if let sourceRepo = worktreeSourceRepo(for: repo) {
-                Button(L10n.Worktree.chooseBranchAgain) {
-                    appState.focusPane(id: paneID)
-                    activeSheet = .worktreePicker(repo: sourceRepo, paneID: paneID)
-                }
-            } else {
-                Button(L10n.Repository.chooseFolderAgain) {
-                    appState.focusPane(id: paneID)
-                    openRepo()
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 32))
+                    .foregroundStyle(.orange)
+                Text(L10n.Workspace.missingRepository)
+                    .font(.headline)
+                Text(repo.path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                if let sourceRepo = worktreeSourceRepo(for: repo) {
+                    Button(L10n.Worktree.chooseBranchAgain) {
+                        appState.focusPane(id: paneID)
+                        activeSheet = .worktreePicker(repo: sourceRepo, paneID: paneID)
+                    }
+                } else {
+                    Button(L10n.Repository.chooseFolderAgain) {
+                        appState.focusPane(id: paneID)
+                        openRepo()
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            closePaneButton(paneID)
+                .padding(8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(20)
         .background(.background)
+    }
+
+    private func closePaneButton(_ paneID: UUID) -> some View {
+        PaneCloseButton(canClosePane: layout.slots.count > 1) {
+            appState.removePane(id: paneID)
+        }
     }
 
     private func worktreeSourceRepo(for missingRepo: Repo) -> Repo? {
@@ -404,19 +546,6 @@ struct ContentView: View {
             if matchingRepos.count == 1 { return matchingRepos.first }
         }
         return candidates.count == 1 ? candidates.first : nil
-    }
-
-    private func paneActionsMenu(paneID: UUID) -> some View {
-        HStack {
-            Spacer()
-            PaneActionsMenu(
-                canClosePane: layout.slots.count > 1,
-                onClosePane: { appState.removePane(id: paneID) },
-                separatesClosePaneAction: false
-            ) {
-                EmptyView()
-            }
-        }
     }
 
     private func openRepo() {
@@ -468,6 +597,58 @@ struct ContentView: View {
         pendingRepoClose = nil
         appState.clearRepo(in: paneID)
         closedRepoToast = ClosedRepoToast(repo: repo, paneID: paneID)
+    }
+
+    private func removeSavedRepositories(_ repos: [Repo]) {
+        for repo in repos {
+            sessionStore.terminateSession(for: repo)
+            appState.removeRepo(id: repo.id)
+        }
+    }
+
+    private func closeAllRepositoriesFromPanes() {
+        guard pendingBatchClose == nil else { return }
+        batchCloseQueue = layout.slots.compactMap { slot in
+            guard let repoID = slot.repoID else { return nil }
+            return BatchCloseCandidate(repoID: repoID, paneID: slot.id)
+        }
+        batchCloseIndex = 0
+        advanceBatchCloseQueue()
+    }
+
+    private func advanceBatchCloseQueue() {
+        while batchCloseIndex < batchCloseQueue.count {
+            let candidate = batchCloseQueue[batchCloseIndex]
+            batchCloseIndex += 1
+            guard layout.slots.contains(where: { $0.id == candidate.paneID && $0.repoID == candidate.repoID }),
+                  let repo = appState.state.savedRepos.first(where: { $0.id == candidate.repoID }) else { continue }
+
+            let activeCommandCount = sessionStore.existingSession(for: repo)?.activeCommandCount ?? 0
+            if activeCommandCount > 0 {
+                pendingBatchClose = PendingBatchClose(
+                    repo: repo,
+                    paneID: candidate.paneID,
+                    activeCommandCount: activeCommandCount
+                )
+                return
+            }
+            appState.clearRepo(in: candidate.paneID)
+        }
+        batchCloseQueue.removeAll()
+        batchCloseIndex = 0
+    }
+
+    private func resolveBatchClose(stopAndClose: Bool) {
+        guard let pendingBatchClose else { return }
+        self.pendingBatchClose = nil
+        if stopAndClose {
+            sessionStore.terminateSession(for: pendingBatchClose.repo)
+            appState.clearRepo(in: pendingBatchClose.paneID)
+        }
+        Task { @MainActor in
+            await Task.yield()
+            advanceBatchCloseQueue()
+        }
     }
 
     private func requestQuit() {
@@ -540,6 +721,7 @@ private struct ClearTerminalShortcutModifier: ViewModifier {
 private enum ContentSheet: Identifiable {
     case quickSwitcher
     case shortcutHelp
+    case repositoryManager
     case worktreePicker(repo: Repo, paneID: UUID)
 
     var id: String {
@@ -548,6 +730,8 @@ private enum ContentSheet: Identifiable {
             return "quickSwitcher"
         case .shortcutHelp:
             return "shortcutHelp"
+        case .repositoryManager:
+            return "repositoryManager"
         case .worktreePicker(let repo, let paneID):
             return "worktreePicker-\(repo.id.uuidString)-\(paneID.uuidString)"
         }
@@ -559,4 +743,20 @@ private struct PendingRepoClose: Identifiable {
     let repo: Repo
     let paneID: UUID
     let runningProcessCount: Int
+}
+
+private struct BatchCloseCandidate {
+    let repoID: UUID
+    let paneID: UUID
+}
+
+private struct PendingBatchClose {
+    let repo: Repo
+    let paneID: UUID
+    let activeCommandCount: Int
+}
+
+private struct PendingLayoutChange {
+    let paneCount: Int
+    let activeCommandCount: Int
 }

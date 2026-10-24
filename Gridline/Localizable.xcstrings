@@ -836,34 +836,18 @@
         }
       }
     },
-    "layout.four_grid" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Four Pane Grid"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Grid Empat Pane"
-          }
-        }
-      }
-    },
     "layout.menu_help" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose pane layout"
+            "value" : "Choose how many panes to show"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pilih tata letak pane"
+            "value" : "Pilih jumlah pane yang ditampilkan"
           }
         }
       }
@@ -884,34 +868,82 @@
         }
       }
     },
-    "layout.one_pane" : {
+    "layout.many_panes_option" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "One Pane"
+            "value" : "Grid of %lld panes"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Satu Pane"
+            "value" : "Grid %lld pane"
           }
         }
       }
     },
-    "layout.two_columns" : {
+    "layout.one_pane_option" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Two Columns"
+            "value" : "Single View"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dua Kolom"
+            "value" : "Tampilan Tunggal"
+          }
+        }
+      }
+    },
+    "layout.change_layout" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change Layout"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ubah Tata Letak"
+          }
+        }
+      }
+    },
+    "layout.hide_with_active_terminal_commands_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The affected panes will be hidden from this view. Their %lld active terminal commands will keep running, and you can show those repositories again by choosing a larger grid."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pane terkait disembunyikan dari tampilan ini. %lld perintah terminal yang aktif tetap berjalan; tampilkan lagi repo tersebut dengan memilih grid yang lebih besar."
+          }
+        }
+      }
+    },
+    "layout.hide_with_active_terminal_commands_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide panes with active terminal commands?"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sembunyikan pane dengan perintah terminal aktif?"
           }
         }
       }
@@ -962,6 +994,28 @@
             "value" : "Tutup Repositori di Pane Aktif"
           }
         }
+      }
+    },
+    "menu.close_all_repositories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close All Repositories from Panes"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tutup Semua Repo dari Pane"
+          }
+        }
+      }
+    },
+    "menu.manage_repositories" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Manage Saved Repositories…" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Kelola Repo Tersimpan…" } }
       }
     },
     "menu.export_log" : {
@@ -1344,6 +1398,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pulihkan Grid"
+          }
+        }
+      }
+    },
+    "pane.select_repository" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Repository for Pane"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pilih Repo untuk Pane"
           }
         }
       }
@@ -2500,6 +2570,70 @@
         }
       }
     },
+    "workspace.batch_close_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop the terminal session for %@?"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hentikan sesi terminal untuk %@?"
+          }
+        }
+      }
+    },
+    "workspace.batch_close_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld terminal commands are active in %@. Stop all terminal tabs for this repository and close it from its pane? The next repository will be handled separately."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ada %lld perintah terminal aktif di %@. Hentikan semua tab terminal repo ini dan tutup dari pane? Repo berikutnya akan dikonfirmasi terpisah."
+          }
+        }
+      }
+    },
+    "workspace.stop_and_close_repository" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop and Close"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hentikan dan Tutup"
+          }
+        }
+      }
+    },
+    "workspace.keep_repository_open" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Open"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jangan Tutup"
+          }
+        }
+      }
+    },
     "workspace.empty_pane_title" : {
       "localizations" : {
         "en" : {
@@ -2610,6 +2744,66 @@
             "value" : "Tidak Ada Repositori Terakhir"
           }
         }
+      }
+    },
+    "workspace.repository_manager_title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved Repositories" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Repo Tersimpan" } }
+      }
+    },
+    "workspace.search_saved_repositories" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Search saved repositories" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Cari repo tersimpan" } }
+      }
+    },
+    "workspace.clear_unavailable_repositories" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear %lld unavailable repositories" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Hapus %lld repo yang tidak tersedia" } }
+      }
+    },
+    "workspace.no_saved_repositories" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Saved Repositories" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Tidak Ada Repo Tersimpan" } }
+      }
+    },
+    "workspace.remove_saved_repository_title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove Repository from Gridline?" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Hapus Repo dari Gridline?" } }
+      }
+    },
+    "workspace.remove_saved_repository_message" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove %@ and stop its terminal sessions? Files and worktrees on disk will remain." } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Hapus %@ dan hentikan sesi terminalnya? Folder dan worktree di disk tetap ada." } }
+      }
+    },
+    "workspace.clear_unavailable_repositories_title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear %lld unavailable repositories?" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Hapus %lld repo yang tidak tersedia?" } }
+      }
+    },
+    "workspace.clear_unavailable_repositories_message" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gridline will forget these entries and stop their terminal sessions. Files and worktrees on disk will not be deleted." } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Gridline akan melupakan entri ini dan menghentikan sesi terminalnya. Folder dan worktree di disk tidak dihapus." } }
+      }
+    },
+    "workspace.remove_from_gridline" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove from Gridline" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Hapus dari Gridline" } }
+      }
+    },
+    "workspace.unavailable_repository" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder or Git metadata is unavailable" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Folder atau metadata Git tidak tersedia" } }
       }
     },
     "workspace.open_repository" : {
@@ -2868,18 +3062,18 @@
         }
       }
     },
-    "worktree.pane_limit_reached" : {
+    "worktree.pane_unavailable" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Empty a pane or close one before opening this branch."
+            "value" : "The pane for this worktree is no longer available. Choose a branch again from an open pane."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kosongkan atau tutup pane sebelum membuka branch ini."
+            "value" : "Pane untuk worktree ini sudah tidak tersedia. Pilih branch lagi dari pane yang masih terbuka."
           }
         }
       }

@@ -13,7 +13,7 @@ import Foundation
 struct AppState: Codable {
     static let recentRepositoryLimit = 3
 
-    var formatVersion: Int = 3
+    var formatVersion: Int = 4
     var savedRepos: [Repo] = []
     var recentRepoIDs: [UUID] = []
     var paneLayout = PaneLayout()
@@ -47,7 +47,7 @@ struct AppState: Codable {
             let topFraction = try container.decodeIfPresent(Double.self, forKey: .paneSplitTopFraction) ?? 0.6
             paneLayout = .migrated(activeRepoID: activeRepoID, topFraction: topFraction)
         }
-        formatVersion = 3
+        formatVersion = 4
     }
 
     func encode(to encoder: Encoder) throws {
@@ -116,9 +116,12 @@ final class AppStateStore: ObservableObject {
         }
     }
 
-    var canAddRepositoryToPane: Bool {
-        state.paneLayout.slots.count < PaneLayout.maximumPaneCount
-            || state.paneLayout.slots.contains(where: { $0.repoID == nil })
+    var paneCountLimit: Int {
+        max(1, max(state.savedRepos.count, state.paneLayout.slots.count))
+    }
+
+    var canAddPane: Bool {
+        state.paneLayout.slots.count < state.savedRepos.count
     }
 
     func clearRecentRepositories() {
@@ -132,6 +135,22 @@ final class AppStateStore: ObservableObject {
         state.recentRepoIDs.append(id)
         if state.recentRepoIDs.count > AppState.recentRepositoryLimit {
             state.recentRepoIDs.removeFirst(state.recentRepoIDs.count - AppState.recentRepositoryLimit)
+        }
+    }
+
+    private func fillEmptyPanesWithSavedRepos() {
+        var assignedRepoIDs = Set(state.paneLayout.slots.compactMap(\.repoID))
+        let savedRepoIDs = Set(state.savedRepos.map(\.id))
+        let candidates = Array(state.recentRepoIDs.reversed()) + state.savedRepos.reversed().map(\.id)
+        var seenRepoIDs = Set<UUID>()
+        let availableRepoIDs = candidates.filter { repoID in
+            seenRepoIDs.insert(repoID).inserted && savedRepoIDs.contains(repoID)
+        }
+
+        for index in state.paneLayout.slots.indices where state.paneLayout.slots[index].repoID == nil {
+            guard let repoID = availableRepoIDs.first(where: { !assignedRepoIDs.contains($0) }) else { break }
+            state.paneLayout.slots[index].repoID = repoID
+            assignedRepoIDs.insert(repoID)
         }
     }
 
@@ -167,7 +186,6 @@ final class AppStateStore: ObservableObject {
         }) {
             let repoID = state.savedRepos[existingIndex].id
             let existingPane = state.paneLayout.slots.first(where: { $0.repoID == repoID })
-            guard existingPane != nil || replacingPaneID != nil || canAddRepositoryToPane else { return false }
             state.savedRepos[existingIndex].displayName = displayName
             state.savedRepos[existingIndex].worktreeSourceRepoID = sourceRepoID
             state.savedRepos[existingIndex].worktreeBranch = branch
@@ -190,7 +208,6 @@ final class AppStateStore: ObservableObject {
             return true
         }
 
-        guard replacingPaneID != nil || canAddRepositoryToPane else { return false }
         let repo = Repo(
             path: normalizedPath,
             displayName: displayName,
@@ -249,6 +266,14 @@ final class AppStateStore: ObservableObject {
         persist()
     }
 
+    func selectRepo(id: UUID, in paneID: UUID) {
+        guard state.savedRepos.contains(where: { $0.id == id }),
+              state.paneLayout.slots.contains(where: { $0.id == paneID }) else { return }
+        markRepoRecent(id)
+        state.paneLayout.selectRepo(id, in: paneID)
+        persist()
+    }
+
     func clearRepo(in paneID: UUID) {
         state.paneLayout.clearRepo(in: paneID)
         persist()
@@ -262,7 +287,9 @@ final class AppStateStore: ObservableObject {
     }
 
     func addPane() {
-        guard state.paneLayout.addPane() != nil else { return }
+        guard canAddPane else { return }
+        state.paneLayout.addPane()
+        fillEmptyPanesWithSavedRepos()
         persist()
     }
 
@@ -271,8 +298,12 @@ final class AppStateStore: ObservableObject {
         persist()
     }
 
-    func setLayoutPreset(_ preset: PaneLayoutPreset) {
-        state.paneLayout.setPreset(preset)
+    func setDisplayPaneCount(_ paneCount: Int) {
+        let previousDisplayCount = state.paneLayout.displayPaneCount
+        state.paneLayout.setDisplayPaneCount(paneCount)
+        if paneCount > previousDisplayCount {
+            fillEmptyPanesWithSavedRepos()
+        }
         persist()
     }
 
@@ -330,19 +361,10 @@ final class AppStateStore: ObservableObject {
         persist()
     }
 
-    func setGridDividerFraction(_ fraction: Double, role: PaneDividerRole) {
-        let clamped = min(max(fraction, 0.1), 0.9)
-        switch role {
-        case .topColumn:
-            guard abs(state.paneLayout.topColumnFraction - clamped) > 0.001 else { return }
-            state.paneLayout.topColumnFraction = clamped
-        case .bottomColumn:
-            guard abs(state.paneLayout.bottomColumnFraction - clamped) > 0.001 else { return }
-            state.paneLayout.bottomColumnFraction = clamped
-        case .row:
-            guard abs(state.paneLayout.rowFraction - clamped) > 0.001 else { return }
-            state.paneLayout.rowFraction = clamped
-        }
+    func setGridDividerFractions(_ fractions: [Double], role: PaneDividerRole) {
+        let previous = state.paneLayout.gridDividerFractions[role.storageKey]
+        state.paneLayout.setDividerFractions(fractions, for: role)
+        guard state.paneLayout.gridDividerFractions[role.storageKey] != previous else { return }
         persistAfterDividerSettles()
     }
 }

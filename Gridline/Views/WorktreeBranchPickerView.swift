@@ -128,8 +128,7 @@ struct WorktreeBranchPickerView: View {
             do {
                 let destination = try await GitWorktreeService.openOrCreateWorktree(
                     branch: branch,
-                    from: repo,
-                    canCreatePane: replacingPaneID != nil || appState.canAddRepositoryToPane
+                    from: repo
                 )
                 guard appState.openRepoInNewPane(
                     path: destination.path,
@@ -139,7 +138,7 @@ struct WorktreeBranchPickerView: View {
                     baseBranch: currentBranch,
                     replacingPaneID: replacingPaneID
                 ) else {
-                    errorMessage = String(localized: L10n.Worktree.paneLimitReached)
+                    errorMessage = String(localized: L10n.Worktree.paneUnavailable)
                     return
                 }
                 dismiss()
@@ -158,8 +157,6 @@ struct WorktreeBranchPickerView: View {
             return L10n.format(L10n.Worktree.operationFailed, detail)
         case .pathAlreadyExists:
             return String(localized: L10n.Worktree.pathAlreadyExists)
-        case .paneLimitReached:
-            return String(localized: L10n.Worktree.paneLimitReached)
         }
     }
 }

@@ -16,10 +16,9 @@ struct PaneGridItem: Identifiable {
 
 struct NestedPaneSplitView: NSViewControllerRepresentable {
     let items: [PaneGridItem]
-    let topColumnFraction: CGFloat
-    let bottomColumnFraction: CGFloat
-    let rowFraction: CGFloat
-    let onDividerChanged: (PaneDividerRole, CGFloat) -> Void
+    let retainedPaneIDs: [UUID]
+    let dividerFractions: [PaneDividerRole: [CGFloat]]
+    let onDividerChanged: (PaneDividerRole, [CGFloat]) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onDividerChanged: onDividerChanged)
@@ -27,23 +26,15 @@ struct NestedPaneSplitView: NSViewControllerRepresentable {
 
     func makeNSViewController(context: Context) -> PaneGridRootViewController {
         let controller = PaneGridRootViewController()
-        controller.update(items: items, coordinator: context.coordinator)
-        controller.applyDividerFractions(
-            topColumn: topColumnFraction,
-            bottomColumn: bottomColumnFraction,
-            row: rowFraction
-        )
+        controller.update(items: items, retainedPaneIDs: retainedPaneIDs, coordinator: context.coordinator)
+        controller.applyDividerFractions(dividerFractions)
         return controller
     }
 
     func updateNSViewController(_ controller: PaneGridRootViewController, context: Context) {
         context.coordinator.onDividerChanged = onDividerChanged
-        controller.update(items: items, coordinator: context.coordinator)
-        controller.applyDividerFractions(
-            topColumn: topColumnFraction,
-            bottomColumn: bottomColumnFraction,
-            row: rowFraction
-        )
+        controller.update(items: items, retainedPaneIDs: retainedPaneIDs, coordinator: context.coordinator)
+        controller.applyDividerFractions(dividerFractions)
     }
 
     static func dismantleNSViewController(_ controller: PaneGridRootViewController, coordinator: Coordinator) {
@@ -52,12 +43,12 @@ struct NestedPaneSplitView: NSViewControllerRepresentable {
 
     @MainActor
     final class Coordinator: NSObject {
-        var onDividerChanged: (PaneDividerRole, CGFloat) -> Void
+        var onDividerChanged: (PaneDividerRole, [CGFloat]) -> Void
         private var observations: [NSObjectProtocol] = []
         private var roles: [ObjectIdentifier: PaneDividerRole] = [:]
         private var isApplyingFractions = false
 
-        init(onDividerChanged: @escaping (PaneDividerRole, CGFloat) -> Void) {
+        init(onDividerChanged: @escaping (PaneDividerRole, [CGFloat]) -> Void) {
             self.onDividerChanged = onDividerChanged
         }
 
@@ -97,15 +88,15 @@ struct NestedPaneSplitView: NSViewControllerRepresentable {
                   let role = roles[ObjectIdentifier(splitView)] else { return }
             let total = splitView.isVertical ? splitView.bounds.width : splitView.bounds.height
             guard total > 0 else { return }
-            let firstLength = splitView.isVertical
-                ? splitView.subviews[0].frame.width
-                : splitView.subviews[0].frame.height
-            let fraction = firstLength / total
+            let fractions = splitView.subviews.dropLast().map { subview in
+                let dividerPosition = splitView.isVertical ? subview.frame.maxX : subview.frame.maxY
+                return dividerPosition / total
+            }
             // Notifikasi NSSplitView dapat muncul ketika SwiftUI sedang
             // menjalankan updateNSViewController. Tunda publikasi state satu
             // putaran run loop agar perubahan tidak re-entrant ke view update.
             DispatchQueue.main.async { [weak self] in
-                self?.onDividerChanged(role, fraction)
+                self?.onDividerChanged(role, fractions)
             }
         }
     }
@@ -113,7 +104,7 @@ struct NestedPaneSplitView: NSViewControllerRepresentable {
 
 @MainActor
 final class PaneGridRootViewController: NSViewController {
-    private var paneIDs: [UUID] = []
+    private var visiblePaneIDs: [UUID] = []
     private var hostingControllers: [UUID: NSHostingController<AnyView>] = [:]
     private var gridController: NSViewController?
     private weak var coordinator: NestedPaneSplitView.Coordinator?
@@ -123,77 +114,94 @@ final class PaneGridRootViewController: NSViewController {
     /// pass AppKit sinkron) saat SwiftUI re-render karena state lain yang
     /// tidak terkait grid (lihat AppStateStore, satu `@Published` untuk
     /// seluruh `AppState`).
-    private var lastAppliedFractions: (topColumn: CGFloat, bottomColumn: CGFloat, row: CGFloat)?
+    private var lastAppliedFractions: [PaneDividerRole: [CGFloat]]?
 
     override func loadView() {
         view = NSView()
     }
 
-    func update(items: [PaneGridItem], coordinator: NestedPaneSplitView.Coordinator) {
+    func update(
+        items: [PaneGridItem],
+        retainedPaneIDs: [UUID],
+        coordinator: NestedPaneSplitView.Coordinator
+    ) {
         self.coordinator = coordinator
-        let newIDs = items.map(\.id)
-        if newIDs != paneIDs {
-            rebuild(with: items, coordinator: coordinator)
-        } else {
-            for item in items {
-                hostingControllers[item.id]?.rootView = item.content
+        let retainedIDs = Set(retainedPaneIDs)
+        let removedIDs = hostingControllers.keys.filter { !retainedIDs.contains($0) }
+        for id in removedIDs {
+            guard let controller = hostingControllers.removeValue(forKey: id) else { continue }
+            controller.view.removeFromSuperview()
+            controller.removeFromParent()
+        }
+
+        for item in items {
+            if let controller = hostingControllers[item.id] {
+                controller.rootView = item.content
+            } else {
+                hostingControllers[item.id] = NSHostingController(rootView: item.content)
             }
         }
+
+        let newVisiblePaneIDs = items.map(\.id)
+        guard newVisiblePaneIDs != visiblePaneIDs else { return }
+        rebuild(with: items, coordinator: coordinator)
     }
 
-    func applyDividerFractions(topColumn: CGFloat, bottomColumn: CGFloat, row: CGFloat) {
+    func applyDividerFractions(_ fractions: [PaneDividerRole: [CGFloat]]) {
         guard let coordinator else { return }
-        if let last = lastAppliedFractions,
-           last.topColumn == topColumn, last.bottomColumn == bottomColumn, last.row == row {
-            return
-        }
-        lastAppliedFractions = (topColumn, bottomColumn, row)
+        guard lastAppliedFractions != fractions else { return }
+        lastAppliedFractions = fractions
         view.layoutSubtreeIfNeeded()
         coordinator.applyingFractions {
-            set(topColumn, on: dividerViews[.topColumn])
-            set(bottomColumn, on: dividerViews[.bottomColumn])
-            set(row, on: dividerViews[.row])
+            for (role, splitFractions) in fractions {
+                set(splitFractions, on: dividerViews[role])
+            }
         }
     }
 
     private func rebuild(with items: [PaneGridItem], coordinator: NestedPaneSplitView.Coordinator) {
         coordinator.stopObserving()
+        // Keep each pane's hosting controller alive while its tile is outside
+        // the selected view. Only detach it from the current split hierarchy.
+        hostingControllers.values.forEach { controller in
+            controller.view.removeFromSuperview()
+            controller.removeFromParent()
+        }
         if let gridController {
             gridController.view.removeFromSuperview()
             gridController.removeFromParent()
         }
 
-        paneIDs = items.map(\.id)
-        hostingControllers = Dictionary(uniqueKeysWithValues: items.map { item in
-            (item.id, NSHostingController(rootView: item.content))
-        })
+        visiblePaneIDs = items.map(\.id)
         dividerViews.removeAll()
         // Split view baru belum punya posisi divider — paksa applyDividerFractions
         // berikutnya benar-benar jalan walau fraction-nya kebetulan sama seperti
         // sebelum rebuild.
         lastAppliedFractions = nil
 
+        let shape = PaneGridShape(paneCount: items.count)
+        var itemOffset = 0
+        var rowControllers: [NSViewController] = []
+        if !items.isEmpty {
+            for (row, rowLength) in shape.rowLengths.enumerated() {
+                let rowItems = Array(items[itemOffset..<(itemOffset + rowLength)])
+                var controllers = rowItems.compactMap { hostingControllers[$0.id] }
+                while controllers.count < shape.columnCount {
+                    controllers.append(NSHostingController(rootView: AnyView(Color.clear)))
+                }
+                rowControllers.append(makeColumnSplit(controllers: controllers, row: row))
+                itemOffset += rowLength
+            }
+        }
+
         let nextController: NSViewController
         switch items.count {
         case 0:
             nextController = NSHostingController(rootView: AnyView(EmptyView()))
         case 1:
-            nextController = hostingControllers[items[0].id]!
-        case 2:
-            nextController = makeColumnSplit(
-                controllers: items.compactMap { hostingControllers[$0.id] },
-                role: .topColumn
-            )
+            nextController = rowControllers[0]
         default:
-            let top = makeColumnSplit(
-                controllers: Array(items.prefix(2)).compactMap { hostingControllers[$0.id] },
-                role: .topColumn
-            )
-            let bottom = makeColumnSplit(
-                controllers: Array(items.dropFirst(2)).compactMap { hostingControllers[$0.id] },
-                role: .bottomColumn
-            )
-            nextController = makeRowSplit(controllers: [top, bottom])
+            nextController = makeRowSplit(controllers: rowControllers)
         }
 
         addChild(nextController)
@@ -212,7 +220,7 @@ final class PaneGridRootViewController: NSViewController {
 
     private func makeColumnSplit(
         controllers: [NSViewController],
-        role: PaneDividerRole
+        row: Int
     ) -> NSViewController {
         guard controllers.count > 1 else { return controllers[0] }
         let splitController = NSSplitViewController()
@@ -224,7 +232,7 @@ final class PaneGridRootViewController: NSViewController {
             item.canCollapse = false
             splitController.addSplitViewItem(item)
         }
-        dividerViews[role] = splitController.splitView
+        dividerViews[.columns(row: row)] = splitController.splitView
         return splitController
     }
 
@@ -238,20 +246,22 @@ final class PaneGridRootViewController: NSViewController {
             item.canCollapse = false
             splitController.addSplitViewItem(item)
         }
-        dividerViews[.row] = splitController.splitView
+        dividerViews[.rows] = splitController.splitView
         return splitController
     }
 
-    private func set(_ fraction: CGFloat, on splitView: NSSplitView?) {
+    private func set(_ fractions: [CGFloat], on splitView: NSSplitView?) {
         guard let splitView, splitView.subviews.count > 1 else { return }
         let total = splitView.isVertical ? splitView.bounds.width : splitView.bounds.height
         guard total > 0 else { return }
-        let target = total * min(max(fraction, 0.1), 0.9)
-        let current = splitView.isVertical
-            ? splitView.subviews[0].frame.width
-            : splitView.subviews[0].frame.height
-        guard abs(current - target) > 1 else { return }
-        splitView.setPosition(target, ofDividerAt: 0)
+        for (index, fraction) in fractions.enumerated() where index < splitView.subviews.count - 1 {
+            let target = total * min(max(fraction, 0.1), 0.9)
+            let current = splitView.isVertical
+                ? splitView.subviews[index].frame.maxX
+                : splitView.subviews[index].frame.maxY
+            guard abs(current - target) > 1 else { continue }
+            splitView.setPosition(target, ofDividerAt: index)
+        }
     }
 }
 
@@ -259,17 +269,16 @@ enum PaneMetrics {
     static let toolbarHeight: CGFloat = 52
     static let minimumPaneWidth: CGFloat = 680
     static let minimumPaneHeight: CGFloat = 440
-    static let twoColumnWidth: CGFloat = 1_380
-    static let twoRowHeight: CGFloat = 888
+    static let columnGap: CGFloat = 20
+    static let rowGap: CGFloat = 8
 
     static func minimumGridSize(for paneCount: Int) -> CGSize {
-        switch paneCount {
-        case 1:
-            CGSize(width: minimumPaneWidth, height: minimumPaneHeight)
-        case 2:
-            CGSize(width: twoColumnWidth, height: minimumPaneHeight)
-        default:
-            CGSize(width: twoColumnWidth, height: twoRowHeight)
-        }
+        let shape = PaneGridShape(paneCount: paneCount)
+        return CGSize(
+            width: CGFloat(shape.columnCount) * minimumPaneWidth
+                + CGFloat(max(0, shape.columnCount - 1)) * columnGap,
+            height: CGFloat(shape.rowCount) * minimumPaneHeight
+                + CGFloat(max(0, shape.rowCount - 1)) * rowGap
+        )
     }
 }

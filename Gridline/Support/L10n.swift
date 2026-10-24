@@ -28,7 +28,9 @@ enum L10n {
         static let repository: LocalizedStringResource = "menu.repository"
         static let openRepository: LocalizedStringResource = "menu.open_repository"
         static let searchRepositoryOrFile: LocalizedStringResource = "menu.search_repository_or_file"
+        static let manageRepositories: LocalizedStringResource = "menu.manage_repositories"
         static let closeActiveRepository: LocalizedStringResource = "menu.close_active_repository"
+        static let closeAllRepositories: LocalizedStringResource = "menu.close_all_repositories"
         static let pane: LocalizedStringResource = "menu.pane"
         static let addPane: LocalizedStringResource = "menu.add_pane"
         static let focusPane: LocalizedStringResource = "menu.focus_pane"
@@ -66,6 +68,7 @@ enum L10n {
 
     enum Pane {
         static let actions: LocalizedStringResource = "pane.actions"
+        static let selectRepository: LocalizedStringResource = "pane.select_repository"
         static let close: LocalizedStringResource = "pane.close"
         static let accessibilityLabel: LocalizedStringResource = "pane.accessibility_label"
         static let emptyMessage: LocalizedStringResource = "pane.empty_message"
@@ -79,9 +82,17 @@ enum L10n {
     enum Layout {
         static let menuLabel: LocalizedStringResource = "layout.menu_label"
         static let menuHelp: LocalizedStringResource = "layout.menu_help"
-        static let onePane: LocalizedStringResource = "layout.one_pane"
-        static let twoColumns: LocalizedStringResource = "layout.two_columns"
-        static let fourGrid: LocalizedStringResource = "layout.four_grid"
+        static let onePaneOption: LocalizedStringResource = "layout.one_pane_option"
+        static let manyPanesOption: LocalizedStringResource = "layout.many_panes_option"
+        static let hideWithActiveTerminalCommandsTitle: LocalizedStringResource = "layout.hide_with_active_terminal_commands_title"
+        static let hideWithActiveTerminalCommandsMessage: LocalizedStringResource = "layout.hide_with_active_terminal_commands_message"
+        static let changeLayout: LocalizedStringResource = "layout.change_layout"
+
+        static func paneCountOption(_ count: Int) -> String {
+            count == 1
+                ? String(localized: onePaneOption)
+                : L10n.format(manyPanesOption, Int64(count))
+        }
     }
 
     enum Terminal {
@@ -161,7 +172,7 @@ enum L10n {
         static let noOtherBranches: LocalizedStringResource = "worktree.no_other_branches"
         static let loadFailed: LocalizedStringResource = "worktree.load_failed"
         static let operationFailed: LocalizedStringResource = "worktree.operation_failed"
-        static let paneLimitReached: LocalizedStringResource = "worktree.pane_limit_reached"
+        static let paneUnavailable: LocalizedStringResource = "worktree.pane_unavailable"
         static let pathAlreadyExists: LocalizedStringResource = "worktree.path_already_exists"
         static let chooseBranchAgain: LocalizedStringResource = "worktree.choose_branch_again"
     }
@@ -226,6 +237,10 @@ enum L10n {
     enum Workspace {
         static let closeRepositoryTitle: LocalizedStringResource = "workspace.close_repository_title"
         static let repositoryClosedMessage: LocalizedStringResource = "workspace.repository_closed_message"
+        static let batchCloseTitle: LocalizedStringResource = "workspace.batch_close_title"
+        static let batchCloseMessage: LocalizedStringResource = "workspace.batch_close_message"
+        static let stopAndCloseRepository: LocalizedStringResource = "workspace.stop_and_close_repository"
+        static let keepRepositoryOpen: LocalizedStringResource = "workspace.keep_repository_open"
         static let quitTitle: LocalizedStringResource = "workspace.quit_title"
         static let quitMessage: LocalizedStringResource = "workspace.quit_message"
         static let cannotOpenRepository: LocalizedStringResource = "workspace.cannot_open_repository"
@@ -237,6 +252,16 @@ enum L10n {
         static let recentRepositories: LocalizedStringResource = "workspace.recent_repositories"
         static let clearRecentRepositories: LocalizedStringResource = "workspace.clear_recent_repositories"
         static let noRecentRepositories: LocalizedStringResource = "workspace.no_recent_repositories"
+        static let repositoryManagerTitle: LocalizedStringResource = "workspace.repository_manager_title"
+        static let searchSavedRepositories: LocalizedStringResource = "workspace.search_saved_repositories"
+        static let clearUnavailableRepositories: LocalizedStringResource = "workspace.clear_unavailable_repositories"
+        static let noSavedRepositories: LocalizedStringResource = "workspace.no_saved_repositories"
+        static let removeSavedRepositoryTitle: LocalizedStringResource = "workspace.remove_saved_repository_title"
+        static let removeSavedRepositoryMessage: LocalizedStringResource = "workspace.remove_saved_repository_message"
+        static let clearUnavailableRepositoriesTitle: LocalizedStringResource = "workspace.clear_unavailable_repositories_title"
+        static let clearUnavailableRepositoriesMessage: LocalizedStringResource = "workspace.clear_unavailable_repositories_message"
+        static let removeFromGridline: LocalizedStringResource = "workspace.remove_from_gridline"
+        static let unavailableRepository: LocalizedStringResource = "workspace.unavailable_repository"
         static let openRepository: LocalizedStringResource = "workspace.open_repository"
         static let missingRepository: LocalizedStringResource = "workspace.missing_repository"
         static let openedOutsideRepository: LocalizedStringResource = "workspace.opened_outside_repository"

@@ -16,7 +16,6 @@ struct GitWorktreeDestination {
 enum GitWorktreeError: Error {
     case commandFailed(String)
     case pathAlreadyExists
-    case paneLimitReached
 }
 
 enum GitWorktreeService {
@@ -49,8 +48,7 @@ enum GitWorktreeService {
 
     static func openOrCreateWorktree(
         branch: String,
-        from repo: Repo,
-        canCreatePane: Bool
+        from repo: Repo
     ) async throws -> GitWorktreeDestination {
         async let worktreeRequest = GitProcess.run(
             ["--no-optional-locks", "worktree", "list", "--porcelain", "-z"],
@@ -81,7 +79,6 @@ enum GitWorktreeService {
             }
         }
 
-        guard canCreatePane else { throw GitWorktreeError.paneLimitReached }
         let targetURL = worktreeURL(commonGitDirectory: commonDirectory, branch: branch)
         guard !FileManager.default.fileExists(atPath: targetURL.path) else {
             throw GitWorktreeError.pathAlreadyExists

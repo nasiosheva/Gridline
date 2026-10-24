@@ -3,20 +3,22 @@
 //  Gridline
 //
 //  Satu pane repo: header, area atas (tab Diff + tab viewer file), area
-//  bawah (terminal). Grid multi-pane (maks 4) adalah M3; untuk saat ini
-//  jendela menampilkan satu pane penuh.
+//  bawah (terminal). Grid multi-pane dikelola oleh NestedPaneSplitView.
 //
 
 import SwiftUI
 
 struct RepoPaneView: View {
     let repo: Repo
+    let availableRepos: [Repo]
     @ObservedObject var session: RepoSession
     @Binding var topFraction: CGFloat
     let isActivePane: Bool
     let isMaximized: Bool
     let isTerminalOnly: Bool
     let viewerAsSidePanel: Bool
+    var onSelectRepo: (UUID) -> Void
+    var onManageRepositories: () -> Void
     var onClose: () -> Void
     var canClosePane: Bool
     var onClosePane: () -> Void
@@ -37,11 +39,14 @@ struct RepoPaneView: View {
         VStack(spacing: 0) {
             RepoPaneHeaderView(
                 repo: repo,
+                availableRepos: availableRepos,
                 diffStore: diffStore,
                 attention: session.attention,
                 workStatus: session.workStatus,
                 isMaximized: isMaximized,
                 isTerminalOnly: isTerminalOnly,
+                onSelectRepo: onSelectRepo,
+                onManageRepositories: onManageRepositories,
                 onClose: onClose,
                 canClosePane: canClosePane,
                 onClosePane: onClosePane,

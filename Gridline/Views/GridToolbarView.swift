@@ -7,11 +7,14 @@ import SwiftUI
 
 struct GridToolbarView: View {
     let paneCount: Int
+    let paneCountLimit: Int
+    let paneCountChoices: [Int]
+    let canAddPane: Bool
     let attentionCount: Int
-    let activePreset: PaneLayoutPreset?
+    let selectedPaneCount: Int
     let onOpenRepo: () -> Void
     let onAddPane: () -> Void
-    let onSelectPreset: (PaneLayoutPreset) -> Void
+    let onSelectPaneCount: (Int) -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -19,18 +22,21 @@ struct GridToolbarView: View {
 
             Menu {
                 Button(L10n.Menu.addPane, systemImage: "plus.rectangle.on.rectangle", action: onAddPane)
-                    .disabled(paneCount >= PaneLayout.maximumPaneCount)
+                    .disabled(!canAddPane)
 
                 Divider()
 
-                ForEach(PaneLayoutPreset.allCases) { preset in
+                ForEach(paneCountChoices, id: \.self) { count in
                     Button {
-                        onSelectPreset(preset)
+                        onSelectPaneCount(count)
                     } label: {
                         HStack {
-                            Label(preset.title, systemImage: preset.systemImage)
+                            Label(
+                                L10n.Layout.paneCountOption(count),
+                                systemImage: layoutSymbol(for: count)
+                            )
                             Spacer()
-                            if activePreset == preset {
+                            if selectedPaneCount == count {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -38,13 +44,13 @@ struct GridToolbarView: View {
                 }
             } label: {
                 Label {
-                    Text(L10n.format(L10n.Layout.menuLabel, Int64(paneCount), Int64(PaneLayout.maximumPaneCount)))
+                    Text(L10n.format(L10n.Layout.menuLabel, Int64(paneCount), Int64(paneCountLimit)))
                 } icon: {
                     Image(systemName: "square.grid.2x2")
                 }
             }
             .help(L10n.Layout.menuHelp)
-            .accessibilityLabel(L10n.format(L10n.Layout.menuLabel, Int64(paneCount), Int64(PaneLayout.maximumPaneCount)))
+            .accessibilityLabel(L10n.format(L10n.Layout.menuLabel, Int64(paneCount), Int64(paneCountLimit)))
 
             Spacer()
 
@@ -59,5 +65,13 @@ struct GridToolbarView: View {
         .padding(.horizontal, 12)
         .frame(height: PaneMetrics.toolbarHeight)
         .background(.bar)
+    }
+
+    private func layoutSymbol(for count: Int) -> String {
+        switch count {
+        case 1: "rectangle"
+        case 2: "rectangle.split.2x1"
+        default: "square.grid.2x2"
+        }
     }
 }

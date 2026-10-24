@@ -56,6 +56,10 @@ final class RepoSession: ObservableObject {
         tabs.filter(\.isRunning).count
     }
 
+    var activeCommandCount: Int {
+        tabs.filter(\.hasActiveCommand).count
+    }
+
     var workStatus: RepoWorkStatus {
         if attention == .failed { return .needsAttention }
         if runningProcessCount > 0 { return .running(runningProcessCount) }

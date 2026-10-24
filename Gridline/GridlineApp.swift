@@ -62,27 +62,37 @@ struct GridlineApp: App {
                 }
                 .keyboardShortcut("p", modifiers: .command)
 
+                Button(L10n.Menu.manageRepositories) {
+                    NotificationCenter.default.post(name: .gridlineManageRepositories, object: nil)
+                }
+
                 Divider()
 
                 Button(L10n.Menu.closeActiveRepository) {
                     NotificationCenter.default.post(name: .gridlineCloseActiveRepo, object: nil)
                 }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button(L10n.Menu.closeAllRepositories) {
+                    NotificationCenter.default.post(name: .gridlineCloseAllRepositories, object: nil)
+                }
+                .disabled(!appState.state.paneLayout.slots.contains(where: { $0.repoID != nil }))
             }
             CommandMenu(L10n.Menu.pane) {
                 Button(L10n.Menu.addPane) {
                     appState.addPane()
                 }
-                .disabled(appState.state.paneLayout.slots.count >= PaneLayout.maximumPaneCount)
+                .disabled(!appState.canAddPane)
 
                 Divider()
 
-                ForEach(0..<PaneLayout.maximumPaneCount, id: \.self) { index in
+                ForEach(0..<min(appState.state.paneLayout.displayPaneCount, 4), id: \.self) { index in
                     Button(L10n.format(L10n.Menu.focusPane, Int64(index + 1))) {
                         appState.focusPane(at: index)
                     }
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
-                    .disabled(index >= appState.state.paneLayout.slots.count)
                 }
 
                 Divider()
@@ -154,6 +164,8 @@ final class GridlineAppDelegate: NSObject, NSApplicationDelegate {
 extension Notification.Name {
     static let gridlineOpenRepo = Notification.Name("gridlineOpenRepo")
     static let gridlineCloseActiveRepo = Notification.Name("gridlineCloseActiveRepo")
+    static let gridlineCloseAllRepositories = Notification.Name("gridlineCloseAllRepositories")
+    static let gridlineManageRepositories = Notification.Name("gridlineManageRepositories")
     static let gridlineRequestQuit = Notification.Name("gridlineRequestQuit")
     static let gridlineQuickSwitcher = Notification.Name("gridlineQuickSwitcher")
     static let gridlineShortcutHelp = Notification.Name("gridlineShortcutHelp")
