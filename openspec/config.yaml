@@ -1,0 +1,49 @@
+schema: spec-driven
+
+# Project context: constraint yang tidak bisa disimpulkan hanya dari membaca
+# kode. Dokumentasi umum tetap di apps-spec.md (spesifikasi penuh) dan
+# DECISIONS.md (keputusan arsitektur, append-only, jangan ditimpa). TASK.md
+# melacak progres per-file terhadap milestone apps-spec.md bagian 16.
+context: |
+  Baca apps-spec.md (spesifikasi lengkap, bahasa Indonesia), DECISIONS.md
+  (keputusan arsitektur beralasan, format append-only), dan TASK.md (status
+  implementasi per-file) sebelum membuat proposal atau tugas baru.
+
+  Aturan paling mudah dilanggar (D6 di DECISIONS.md): sesi terminal disimpan
+  di model repo (RepoSession), bukan di view/pane. Menutup pane, menutup
+  repo dari pane, memaksimalkan pane, atau memindahkan fokus TIDAK PERNAH
+  boleh menghentikan proses terminal yang berjalan.
+
+  Aplikasi bersifat read-only terhadap Git: tidak ada stage/unstage/commit
+  langsung dari UI. Semua pemanggilan Git yang memantau working tree harus
+  pakai `--no-optional-locks` (D8) dan tidak pernah menulis ke `.git`.
+
+  Target: macOS 26+, Apple Silicon (arm64) saja, tanpa App Sandbox (Hardened
+  Runtime aktif) karena aplikasi menjalankan shell/git bebas di folder
+  pengguna (D16/D17).
+
+  Ikuti urutan milestone M1-M4 di apps-spec.md bagian 16 kecuali diminta
+  lain. Jangan membangun fitur dari milestone berikutnya sebelum milestone
+  berjalan selesai dan buildnya sukses.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
