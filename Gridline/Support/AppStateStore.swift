@@ -155,6 +155,7 @@ final class AppStateStore: ObservableObject {
         displayName: String,
         sourceRepoID: UUID? = nil,
         branch: String? = nil,
+        baseBranch: String? = nil,
         replacingPaneID: UUID? = nil
     ) -> Bool {
         let normalizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
@@ -170,6 +171,7 @@ final class AppStateStore: ObservableObject {
             state.savedRepos[existingIndex].displayName = displayName
             state.savedRepos[existingIndex].worktreeSourceRepoID = sourceRepoID
             state.savedRepos[existingIndex].worktreeBranch = branch
+            state.savedRepos[existingIndex].worktreeBaseBranch = baseBranch
             if let existingPane {
                 state.paneLayout.activePaneID = existingPane.id
                 markRepoRecent(repoID)
@@ -193,7 +195,8 @@ final class AppStateStore: ObservableObject {
             path: normalizedPath,
             displayName: displayName,
             worktreeSourceRepoID: sourceRepoID,
-            worktreeBranch: branch
+            worktreeBranch: branch,
+            worktreeBaseBranch: baseBranch
         )
         state.savedRepos.append(repo)
         markRepoRecent(repo.id)
@@ -206,6 +209,16 @@ final class AppStateStore: ObservableObject {
         }
         persist()
         return true
+    }
+
+    /// Dipanggil sekali setelah pane worktree memakai `worktreeBaseBranch` sebagai
+    /// perbandingan diff awal — menghapusnya dari state supaya tidak dipaksakan lagi
+    /// di setiap pembukaan app berikutnya (lihat `RepoDiffStore.onInitialComparisonBranchConsumed`).
+    func consumeWorktreeBaseBranch(for repoID: UUID) {
+        guard let index = state.savedRepos.firstIndex(where: { $0.id == repoID }),
+              state.savedRepos[index].worktreeBaseBranch != nil else { return }
+        state.savedRepos[index].worktreeBaseBranch = nil
+        persist()
     }
 
     func removeRepo(id: UUID) {

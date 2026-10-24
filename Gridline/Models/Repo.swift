@@ -16,19 +16,26 @@ struct Repo: Identifiable, Codable, Hashable {
     var displayName: String?
     var worktreeSourceRepoID: UUID?
     var worktreeBranch: String?
+    /// Branch yang sedang aktif di repo asal saat worktree ini dibuka (bagian "Buka
+    /// branch di pane baru"). Dipakai sebagai perbandingan awal di panel diff supaya
+    /// pane baru langsung menunjukkan apa yang berbeda dari branch tersebut, bukan
+    /// "Local Changes" yang kosong untuk worktree yang baru dibuat.
+    var worktreeBaseBranch: String?
 
     init(
         id: UUID = UUID(),
         path: String,
         displayName: String? = nil,
         worktreeSourceRepoID: UUID? = nil,
-        worktreeBranch: String? = nil
+        worktreeBranch: String? = nil,
+        worktreeBaseBranch: String? = nil
     ) {
         self.id = id
         self.path = path
         self.displayName = displayName
         self.worktreeSourceRepoID = worktreeSourceRepoID
         self.worktreeBranch = worktreeBranch
+        self.worktreeBaseBranch = worktreeBaseBranch
     }
 
     var url: URL {

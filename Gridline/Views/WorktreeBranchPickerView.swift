@@ -136,6 +136,7 @@ struct WorktreeBranchPickerView: View {
                     displayName: destination.displayName,
                     sourceRepoID: destination.sourceRepoID,
                     branch: destination.branch,
+                    baseBranch: currentBranch,
                     replacingPaneID: replacingPaneID
                 ) else {
                     errorMessage = String(localized: L10n.Worktree.paneLimitReached)

@@ -118,6 +118,12 @@ final class PaneGridRootViewController: NSViewController {
     private var gridController: NSViewController?
     private weak var coordinator: NestedPaneSplitView.Coordinator?
     private var dividerViews: [PaneDividerRole: NSSplitView] = [:]
+    /// Fraction terakhir yang benar-benar diterapkan — dipakai supaya
+    /// `applyDividerFractions` tidak memicu `layoutSubtreeIfNeeded()` (layout
+    /// pass AppKit sinkron) saat SwiftUI re-render karena state lain yang
+    /// tidak terkait grid (lihat AppStateStore, satu `@Published` untuk
+    /// seluruh `AppState`).
+    private var lastAppliedFractions: (topColumn: CGFloat, bottomColumn: CGFloat, row: CGFloat)?
 
     override func loadView() {
         view = NSView()
@@ -137,6 +143,11 @@ final class PaneGridRootViewController: NSViewController {
 
     func applyDividerFractions(topColumn: CGFloat, bottomColumn: CGFloat, row: CGFloat) {
         guard let coordinator else { return }
+        if let last = lastAppliedFractions,
+           last.topColumn == topColumn, last.bottomColumn == bottomColumn, last.row == row {
+            return
+        }
+        lastAppliedFractions = (topColumn, bottomColumn, row)
         view.layoutSubtreeIfNeeded()
         coordinator.applyingFractions {
             set(topColumn, on: dividerViews[.topColumn])
@@ -157,6 +168,10 @@ final class PaneGridRootViewController: NSViewController {
             (item.id, NSHostingController(rootView: item.content))
         })
         dividerViews.removeAll()
+        // Split view baru belum punya posisi divider — paksa applyDividerFractions
+        // berikutnya benar-benar jalan walau fraction-nya kebetulan sama seperti
+        // sebelum rebuild.
+        lastAppliedFractions = nil
 
         let nextController: NSViewController
         switch items.count {

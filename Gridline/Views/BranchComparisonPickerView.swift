@@ -59,7 +59,22 @@ struct BranchComparisonPickerView: View {
         }
         .padding(20)
         .frame(width: 420, height: 270)
-        .onAppear(perform: selectInitialBranches)
+        .onAppear {
+            selectInitialBranches()
+            store.refreshComparisonBranchesForPicker()
+        }
+        .onReceive(store.$availableComparisonBranches) { branches in
+            // Hanya betulkan pilihan kalau branch yang sedang terpilih sudah tidak ada
+            // lagi di daftar baru (misalnya dihapus dari luar) — jangan menimpa pilihan
+            // manual pengguna yang masih valid setiap kali daftar branch di-refresh.
+            guard !branches.isEmpty else { return }
+            if !branches.contains(baseBranch) {
+                baseBranch = branches.first ?? ""
+            }
+            if !branches.contains(targetBranch) || targetBranch == baseBranch {
+                targetBranch = branches.first(where: { $0 != baseBranch }) ?? ""
+            }
+        }
     }
 
     private func selectInitialBranches() {

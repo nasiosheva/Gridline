@@ -118,13 +118,21 @@ private struct DiffFileListView: View {
                 }
 
                 if !store.isComparingBranches {
-                    Toggle(L10n.Diff.tenMinutes, isOn: $showRecentOnly)
-                        .toggleStyle(.button)
-                        .help(L10n.Diff.recentFilterHelp)
-                }
-                Toggle(L10n.Diff.hideLargeFiles, isOn: $hideLargeFiles)
+                    Toggle(isOn: $showRecentOnly) {
+                        Label(L10n.Diff.tenMinutes, systemImage: "clock")
+                    }
                     .toggleStyle(.button)
-                    .help(L10n.Diff.hideLargeFilesHelp)
+                    .labelStyle(.iconOnly)
+                    .help(L10n.Diff.recentFilterHelp)
+                    .accessibilityLabel(L10n.Diff.tenMinutes)
+                }
+                Toggle(isOn: $hideLargeFiles) {
+                    Label(L10n.Diff.hideLargeFiles, systemImage: "doc.badge.ellipsis")
+                }
+                .toggleStyle(.button)
+                .labelStyle(.iconOnly)
+                .help(L10n.Diff.hideLargeFilesHelp)
+                .accessibilityLabel(L10n.Diff.hideLargeFiles)
                 Spacer(minLength: 0)
             }
             .font(.caption)
@@ -167,7 +175,12 @@ private struct DiffFileListView: View {
         if let baseBranch = store.comparisonBaseBranch, let targetBranch = store.comparisonTargetBranch {
             return L10n.format(L10n.Diff.branchComparisonLabel, baseBranch, targetBranch)
         }
-        return store.comparisonBranch ?? String(localized: L10n.Diff.localChanges)
+        if let comparisonBranch = store.comparisonBranch {
+            // Bukan "branch aktif" pane — ini branch yang sedang dibandingkan, supaya
+            // tidak terlihat seperti harus sinkron dengan branch di header pane.
+            return L10n.format(L10n.Diff.comparedWithBranch, comparisonBranch)
+        }
+        return String(localized: L10n.Diff.localChanges)
     }
 
     private var emptyListMessage: String {
@@ -288,7 +301,10 @@ private struct DiffBranchPickerPopover: View {
             .padding(10)
         }
         .frame(width: 360, height: 420)
-        .onAppear { searchText = "" }
+        .onAppear {
+            searchText = ""
+            store.refreshComparisonBranchesForPicker()
+        }
     }
 }
 
@@ -403,15 +419,32 @@ private struct DiffContentView: View {
             Spacer()
 
             if let diff = store.selectedDiff {
-                Button(L10n.Diff.copyPath) {
+                Button {
                     NSPasteboard.copyString((store.repoPath as NSString).appendingPathComponent(diff.entry.path))
+                } label: {
+                    Label(L10n.Diff.copyPath, systemImage: "doc.on.clipboard")
                 }
-                Button(L10n.Diff.copyCommand) {
+                .labelStyle(.iconOnly)
+                .help(L10n.Diff.copyPath)
+                .accessibilityLabel(L10n.Diff.copyPath)
+
+                Button {
                     NSPasteboard.copyString(GitDiffService.toggleStageCommand(for: diff.entry))
+                } label: {
+                    Label(L10n.Diff.copyCommand, systemImage: "terminal")
                 }
-                Button(L10n.Common.copyDiff) {
+                .labelStyle(.iconOnly)
+                .help(L10n.Diff.copyCommand)
+                .accessibilityLabel(L10n.Diff.copyCommand)
+
+                Button {
                     NSPasteboard.copyString(diff.rawText)
+                } label: {
+                    Label(L10n.Common.copyDiff, systemImage: "doc.on.doc")
                 }
+                .labelStyle(.iconOnly)
+                .help(L10n.Common.copyDiff)
+                .accessibilityLabel(L10n.Common.copyDiff)
                 .disabled(diff.rawText.isEmpty)
             }
 

@@ -155,6 +155,8 @@ struct PaneActionsMenu<Actions: View>: View {
                 .disabled(!canClosePane)
         } label: {
             Image(systemName: "ellipsis")
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(L10n.Pane.actions)
