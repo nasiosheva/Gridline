@@ -90,6 +90,7 @@ Sedang berjalan. Catatan desain dan verifikasi per langkah ada di bawah:
   - Pane kosong menampilkan hingga tiga repo terakhir sebagai tombol, selain tombol Buka Repo.
   - Pane dengan path yang sudah dipindah/dihapus menampilkan peringatan dan tombol cari ulang folder.
   - Susunan pane, repo, pane aktif, divider, dan frame jendela tetap dipulihkan melalui state JSON/autosave yang sudah ada.
+  - Saat preset layout diperkecil, pane aktif dipertahankan sehingga branch worktree yang sedang dibuka tidak kembali ke repo dasar.
   - Verifikasi: typecheck Swift berhasil; build penuh dan smoke test restart menunggu Xcode GUI.
 - [ ] **15. Worktree (dua branch repo yang sama berdampingan)** *(aksi buka branch dan worktree terkelola diimplementasikan; verifikasi build/runtime pending)*
   - Pane dapat membuka branch lokal lain di worktree terpisah dari menu pane; sesi terminal, diff, dan viewer tetap terisolasi per worktree.
@@ -119,6 +120,9 @@ Sedang berjalan:
   - Panel diff menyediakan filter perubahan 10 menit terakhir dan opsi menyembunyikan file besar berdasarkan ukuran/volume perubahan.
   - Folder repo dapat diseret ke jendela untuk dibuka pada pane aktif.
   - Panel diff dapat menampilkan perubahan working tree terhadap branch lokal lain, termasuk daftar file dan isi diff; mode perubahan lokal tetap tersedia.
+  - Pilihan perbandingan branch per repo kini disimpan di state dan dipulihkan saat app dibuka lagi; branch yang telah dihapus mengembalikan panel ke Local Changes.
+  - Saat jendela dibuka kembali tanpa menghentikan proses app, status Git dan daftar branch di-refresh walaupun repo yang terlihat tetap sama.
+  - Pemantau ringan pada Git `HEAD` mendeteksi checkout bersih di repo biasa dan worktree selama pane terlihat, tanpa memantau seluruh isi `.git`.
   - Semua subfitur checklist 20 sudah diimplementasikan. Checklist tetap pending sampai build dan smoke test GUI berhasil.
 - [ ] **21. Pengaturan (⌘,), diagnostik, ekspor log, dan Sparkle (jika dikonfirmasi).** *(implementasi dasar siap; verifikasi build/runtime pending)*
   - Settings ⌘, menyediakan batas scrollback 1.000, 5.000, 10.000, atau 25.000 baris. Perubahan langsung diterapkan ke tab aktif dan tab baru.
