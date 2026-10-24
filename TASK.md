@@ -65,13 +65,14 @@ Legenda: `[x]` selesai dan sudah diverifikasi build sukses · `[~]` sedang diker
 ## M3 — Grid pane dan manajemen sesi
 
 Sedang berjalan. Catatan desain dan verifikasi per langkah ada di bawah:
-- [x] **10. Grid pane (1/2/3-4 pane), pembagi, preset layout toolbar, fokus ⌘1–⌘4 / ⌥⌘ panah, batas ukuran minimum**
+- [x] **10. Grid pane dinamis (1…N sesuai repo tersimpan), pembagi, pemilih jumlah di toolbar, fokus ⌘1–⌘4 / ⌥⌘ panah, batas ukuran minimum**
   - `apps-spec.md` bagian 15 eksplisit minta `NSSplitViewController` **bersarang** untuk grid 2×2 (bukan `HSplitView`/`VSplitView` SwiftUI bawaan). `PersistedVSplit.swift` (dibuat di M1 langkah 5) sengaja hanya untuk pembagi atas/bawah **dalam satu pane** — jangan dipakai ulang untuk pembagi antar-pane.
   - `AppStateStore` saat ini hanya punya `activeRepoID` tunggal (bukan array pane). Perlu model `PaneLayout`/`PaneSlot` baru menggantikan asumsi "satu repo aktif" di `ContentView.swift` (`repoSwitcher` adalah pengganti sementara yang harus dibongkar di sini).
-  - Implementasi 2026-10-23: `Gridline/Models/PaneLayout.swift` menambah model slot/fokus/preset dengan batas 4 pane; `AppStateStore.swift` memigrasikan state M1 dan menyimpan layout, split per-pane, serta tiga divider grid.
-  - `Gridline/Views/NestedPaneSplitView.swift` memakai `NSSplitViewController` bersarang untuk 2 kolom dan grid 2×2. `GridToolbarView.swift` menyediakan Buka Repo, Tambah Pane, indikator jumlah, dan preset 1/2/4. `ContentView.swift` sekarang merender slot grid, garis fokus, placeholder, scroll + peringatan ukuran minimum, dan tidak lagi memakai `repoSwitcher` global.
+  - Implementasi awal 2026-10-23 (riwayat, diperluas di bawah): `PaneLayout` membatasi jumlah ke empat; `AppStateStore` memigrasikan state M1 dan menyimpan layout serta divider.
+  - Baseline 2026-10-23: `NestedPaneSplitView` memakai `NSSplitViewController` bersarang. Toolbar awal menyediakan jumlah 1/2/4; pembaruan 2026-10-24 menggantinya dengan pemilih jumlah dinamis. `ContentView` merender slot grid, garis fokus, placeholder, scroll + peringatan ukuran minimum.
+  - Pembaruan 2026-10-24: jumlah tampilan dapat dipilih tanpa menghapus slot pane atau sesi repo tersembunyi; pane aktif tetap ditampilkan. Pemilih repo di header memungkinkan pengguna memilih repo untuk setiap pane; slot repo lain dipindahkan ke tampilan tanpa kehilangan ID host atau sesi. Hosting controller pane yang pernah tampil dipertahankan saat disembunyikan dan dilepas hanya saat slot pane ditutup. Split view membentuk grid seimbang multi-baris, slot grid kosong ditempatkan di akhir baris terakhir, posisi divider disimpan per split, dan slot baru otomatis dibuat saat repo dibuka setelah semua pane terisi. Grid lebih dari empat pane dapat digulir. Build/test perubahan ini tidak dijalankan sesuai permintaan.
   - Menu Pane di `GridlineApp.swift` menyediakan ⌘1–⌘4 dan ⌥⌘+panah. Sesi terminal/diff/viewer tetap dimiliki registry per repo; mengganti preset atau repo pane tidak menghentikan proses.
-  - Verifikasi: seluruh file Swift lolos `swiftc -typecheck -disable-sandbox`; pemeriksaan executable model layout dan migrasi/persistensi state lolos; build Xcode GUI sukses (`Gridline Build Succeeded`, 2026-10-23 11:29 WIB). Smoke test runtime memverifikasi layout 2 kolom, preset 4 pane, batas `4 / 4` yang men-disable Tambah Pane, placeholder, dan pemulihan kembali ke 2 kolom. Callback divider ditunda satu run loop setelah smoke test awal menemukan peringatan re-entrant SwiftUI; run ulang tidak lagi menghasilkan `Publishing changes from within view updates`. Build CLI di environment agent tetap tidak dapat melewati resolver SwiftPM karena nested `sandbox-exec` ditolak sandbox induk, jadi build GUI dipakai untuk bukti build penuh.
+  - Verifikasi historis build 2026-10-23: seluruh file Swift lolos typecheck, model layout dan migrasi state diperiksa, dan build Xcode GUI sukses. Smoke test saat itu memverifikasi batas 4 pane; hasil tersebut mendahului perubahan grid dinamis saat ini. Callback divider ditunda satu run loop setelah ditemukan peringatan re-entrant SwiftUI. Build/test perubahan saat ini tidak dijalankan sesuai permintaan.
 - [ ] **11. Maksimalkan pane (⌃⌘M) dan maksimalkan terminal saja (⌥⌘M)** *(implementasi siap; verifikasi build pending)*
   - `PaneLayout` menyimpan mode pane maksimum dan terminal-only secara Codable, dengan aturan kedua mode saling eksklusif.
   - `ContentView` hanya merender pane maksimum; registry sesi repo lain tetap hidup. `RepoPaneView` menyembunyikan area atas saat terminal-only.
@@ -90,7 +91,8 @@ Sedang berjalan. Catatan desain dan verifikasi per langkah ada di bawah:
   - Pane kosong menampilkan hingga tiga repo terakhir sebagai tombol, selain tombol Buka Repo.
   - Pane dengan path yang sudah dipindah/dihapus menampilkan peringatan dan tombol cari ulang folder.
   - Susunan pane, repo, pane aktif, divider, dan frame jendela tetap dipulihkan melalui state JSON/autosave yang sudah ada.
-  - Saat preset layout diperkecil, pane aktif dipertahankan sehingga branch worktree yang sedang dibuka tidak kembali ke repo dasar.
+  - Jumlah tampilan yang lebih kecil menyembunyikan pane yang tidak muat tanpa menghapus slot atau sesi repo; memilih tampilan lebih besar menampilkan pane itu kembali.
+  - Jika pane yang akan tersembunyi punya command terminal aktif, UI meminta konfirmasi; sesi tetap hidup. Prompt zsh yang idle tidak memicu konfirmasi.
   - Verifikasi: typecheck Swift berhasil; build penuh dan smoke test restart menunggu Xcode GUI.
 - [ ] **15. Worktree (dua branch repo yang sama berdampingan)** *(aksi buka branch dan worktree terkelola diimplementasikan; verifikasi build/runtime pending)*
   - Pane dapat membuka branch lokal lain di worktree terpisah dari menu pane; sesi terminal, diff, dan viewer tetap terisolasi per worktree.
@@ -98,7 +100,11 @@ Sedang berjalan. Catatan desain dan verifikasi per langkah ada di bawah:
   - Pane worktree menyimpan referensi repo sumber dan branch. Jika foldernya hilang, aksi **Pilih Branch Lagi…** membuka pemilih dari repo sumber dan mengganti pane yang sama; metadata worktree Git stale dipruning sebelum pembuatan ulang.
   - Verifikasi executable model untuk identitas worktree sudah berhasil; build penuh dan smoke test dua pane masih pending.
 
-Permintaan tambahan 2026-10-24 (di luar 21 checklist): menu **Layout** menggabungkan tambah pane, preset, dan hitungan; menu **•••** per pane menggabungkan maksimalkan, mode terminal, tutup repo, dan tutup pane. Pane kosong memakai tombol utama **Buka Repo…** dan menu **Repo Terakhir**. Tutup pane menghapus slot, memilih pane tetangga bila pane aktif ditutup, melindungi pane terakhir, dan membiarkan repo beserta sesi terminalnya tetap hidup. Typecheck seluruh source Swift berhasil; build GUI dan smoke test masih pending.
+Permintaan tambahan 2026-10-24 (di luar 21 checklist): menu **Layout** menggabungkan tambah pane dan pilihan mode tampilan; menu **•••** per pane menggabungkan maksimalkan, mode terminal, tutup repo, dan tutup pane. Pane kosong memakai tombol utama **Buka Repo…** dan menu **Repo Terakhir**. Tutup pane menghapus slot, memilih pane tetangga bila pane aktif ditutup, melindungi pane terakhir, dan membiarkan repo beserta sesi terminalnya tetap hidup. Typecheck seluruh source Swift berhasil; build GUI dan smoke test masih pending.
+
+Perubahan tambahan 2026-10-24: memilih tampilan dengan jumlah pane lebih sedikit meminta konfirmasi jika repo yang akan tersembunyi memiliki command terminal aktif. Prompt zsh yang idle tidak memicu konfirmasi. Dialog menyatakan bahwa proses tetap berjalan dan pane dapat ditampilkan kembali. Pengujian tidak dijalankan sesuai instruksi pengguna.
+
+Perubahan tambahan 2026-10-24: saat mengurangi jumlah pane, slot berisi repo kini diprioritaskan daripada slot kosong. Pane aktif tetap diprioritaskan jika sedang menampilkan repo; pane kosong yang baru dibuat tidak lagi menggantikan repo hanya karena sedang aktif.
 
 ---
 
@@ -180,5 +186,11 @@ Permintaan tambahan 2026-10-24: setelah menambah tab terminal, input langsung ma
 Permintaan tambahan 2026-10-24: terminal memakai latar hitam, teks terang, palet ANSI berkontras tinggi, dan warna folder kerja hijau pada prompt zsh bawaan. Palet 16 warna dipasang lewat SwiftTerm; ANSI 256/truecolor tetap ditangani engine, sedangkan preferensi prompt dan `LSCOLORS` milik pengguna dipertahankan.
 
 Permintaan tambahan: menu **Repo Terakhir** punya aksi **Clear Recent** dengan copy Indonesia dan English. Riwayat tiga repo terakhir disimpan terpisah dari daftar repo tersimpan; clear hanya mengosongkan shortcut recent dan tidak menghapus repo, pane aktif, atau berkas di disk. State lama dimigrasikan dengan memakai tiga repo terakhir dari daftar tersimpan.
+
+Permintaan tambahan 2026-10-24: menu **Repo → Tutup Semua Repo dari Pane** memproses setiap pane tersimpan, termasuk yang tersembunyi. Repo dengan perintah terminal aktif meminta konfirmasi berurutan per pane; **Hentikan dan Tutup** menghentikan seluruh tab terminal repo tersebut lalu melepasnya dari pane, sedangkan **Jangan Tutup** melewatinya tanpa menghentikan sesi. Pane idle dilepas tanpa konfirmasi dan sesi shell tetap hidup. Aksi ini tidak menghapus repo tersimpan atau berkas di disk. Build dan runtime belum diverifikasi.
+
+Permintaan tambahan 2026-10-24: dropdown header hanya menampilkan repo dengan path tersedia. **Kelola Repo Tersimpan** tersedia dari dropdown dan menu **Repo**, dengan pencarian, path untuk membedakan label yang sama, penghapusan satu entri, dan pembersihan semua path yang tidak tersedia. Setiap penghapusan meminta konfirmasi dan menghentikan sesi terminal terkait; folder repo/worktree tidak disentuh. Parser source Swift lolos. Build Debug terhenti sebelum kompilasi: pertama DNS GitHub memblokir fetch SwiftTerm/ArgumentParser, lalu cache SwiftPM/SwiftUI macro tidak dapat ditulis atau dijalankan dalam sandbox. Build dan runtime tetap belum terverifikasi.
+
+Permintaan tambahan 2026-10-24: pane ditutup langsung dengan tombol **×** 32×32 pt di pojok kanan atas, termasuk pane kosong dan repo yang path-nya hilang. Tombol hanya melepas pane; repo dan sesi terminal tetap tersimpan. Pane terakhir tetap tidak bisa ditutup.
 
 Permintaan tambahan 2026-10-24: tinjauan performa menghilangkan proses Git per file untracked, mengecualikan `.git` dari FSEvents, menyatukan debounce ke latency native, menghentikan watcher repo/viewer saat pane tidak terlihat tanpa mematikan sesi terminal, serta melazy-render baris diff dan menghitung filter file sekali per body. Daftar branch pada pemilih Local Changes juga memiliki pencarian inline. Build dan verifikasi GUI untuk perubahan ini masih pending.

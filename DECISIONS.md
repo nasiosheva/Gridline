@@ -92,3 +92,29 @@ Alasan: pengguna tidak perlu membuka tab hanya untuk tahu isinya.
 
 **D29. Klik notifikasi memfokuskan pane dan tab yang bersangkutan. Cmd+klik pada nama ambigu menampilkan pilihan.**
 Alasan: notifikasi yang hanya membuka aplikasi memaksa pengguna mencari sendiri. Membuka file pertama yang cocok bisa membuka file yang salah tanpa disadari.
+
+## 2026-10-24
+
+**D30. Grid pane tidak memiliki batas tetap empat; jumlah pilihan mengikuti repo tersimpan dan jumlah terakhir yang dipulihkan.**
+Susunan memakai grid seimbang dengan kolom `ceil(sqrt(jumlah pane))`; baris terakhir dapat memiliki slot kosong setelah pane terakhir, dan area yang melewati ukuran jendela dapat digulir. Slot pane tidak dihapus saat jumlah tampilan dikurangi; pilihan hanya membatasi pane yang terlihat, sementara pane lain dan sesi repo tetap siap ditampilkan kembali. Menu menyediakan jumlah 1 hingga jumlah repo tersimpan, atau jumlah pane saat ini bila lebih tinggi. Saat grid diperbesar, slot kosong diisi repo tersimpan terbaru yang belum terlihat. D30 menggantikan batas empat pada D4 dan preset tetap 1/2/4 pada D27.
+Alasan: pengguna ingin mengelola banyak repo dalam satu jendela seperti multi-view CCTV. Batas tetap empat membuat repo tambahan tidak bisa ditampilkan berdampingan; grid dinamis mengikuti jumlah repo yang benar-benar tersedia.
+
+**D31. Jumlah pane yang ditampilkan terpisah dari jumlah pane yang tersimpan.**
+Pilihan Single View atau Grid hanya mengubah pane yang sedang tampak. Pane lain, hosting view yang sudah dibuat, repo, dan sesi terminalnya tetap tersedia; grid besar dapat digulir. Pane hanya dilepas dari workspace lewat aksi tutup pane/repo yang eksplisit.
+Alasan: berpindah mode tampilan tidak boleh membuat workspace kehilangan pane yang sudah dibuka.
+
+**D32. Repo yang tampil pada slot dapat dipilih langsung dari header pane.**
+Jika repo pilihan sudah punya slot, slot tersebut dipindahkan ke posisi tampilan tanpa mengganti identitas pane atau menghentikan sesi. Jika belum punya slot, pane saat ini disimpan sebagai pane tersembunyi dan slot baru menampilkan repo pilihan.
+Alasan: pengguna perlu memilih repo mana yang tampil dalam grid kecil sambil mempertahankan pane lain agar dapat ditampilkan kembali.
+
+**D33. Tutup semua repo dari pane memproses pane satu per satu dan meminta konfirmasi untuk sesi terminal yang aktif.**
+Pilihan **Hentikan dan Tutup** menghentikan seluruh tab terminal milik repo itu lalu menutupnya dari pane. **Jangan Tutup** mempertahankan repo dan prosesnya, kemudian antrean berlanjut ke pane berikutnya. Pane tanpa perintah aktif ditutup tanpa konfirmasi; sesi idle tetap hidup sesuai perilaku dasar. Repo tersimpan dan file worktree tidak dihapus.
+Alasan: pengguna dapat membersihkan workspace sekaligus tanpa menghentikan proses yang sedang berjalan tanpa persetujuan per pane.
+
+**D34. Menghapus repo dari Gridline hanya menghapus entri tersimpan, bukan folder di disk.**
+Kelola Repo Tersimpan memungkinkan penghapusan satu entri atau pembersihan entri dengan path yang tidak tersedia. Aksi selalu meminta konfirmasi dan menghentikan sesi terminal terkait agar proses tidak tertinggal tanpa pane. File repo/worktree tetap aman di disk.
+Alasan: daftar repo perlu bisa dirapikan tanpa menghapus pekerjaan pengguna secara permanen.
+
+**D35. Tutup pane memakai tombol × langsung di pojok kanan atas dengan target klik 32×32 pt.**
+Tombol tersedia pada pane berisi repo, pane kosong, dan pane dengan repo yang hilang. Menutup pane hanya melepas tampilan; sesi repo tetap hidup. Pane terakhir tidak dapat ditutup.
+Alasan: aksi tutup pane harus terlihat dan mudah dijangkau tanpa membuka menu tindakan.

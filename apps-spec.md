@@ -9,7 +9,7 @@
 
 Apps macOS native untuk membuka beberapa **repository kode (coding project) yang sudah terintegrasi dengan Git** sekaligus, dalam satu jendela. Apps ini tidak dirancang untuk folder biasa tanpa `.git`.
 
-Jendela utama tidak memakai sidebar. Area kerjanya terbagi menjadi **pane** (panel repo) dalam bentuk grid, dengan batas maksimal **4 pane** (2 baris × 2 kolom). Tiap pane menampilkan satu repo lengkap:
+Jendela utama tidak memakai sidebar. Area kerjanya terbagi menjadi **pane** (panel repo) dalam grid dinamis tanpa batas tetap empat pane. Jumlah slot mengikuti jumlah repo tersimpan yang dapat ditampilkan serta susunan terakhir yang dipilih. Tiap pane menampilkan satu repo lengkap:
 
 - diff perubahan kode,
 - viewer file read-only,
@@ -25,7 +25,7 @@ Tujuan utama adalah **tampilan dan navigasi**, bukan pengeditan kode. Apps ini t
 - Menjalankan banyak proses paralel (server, test, agen AI) di terminal.
 - Membuka file dari output terminal dengan satu klik.
 - Terasa seperti apps macOS asli: ringan, responsif, dan mengikuti konvensi macOS.
-- Hemat RAM dan CPU, termasuk saat 4 repo dan banyak terminal berjalan bersamaan (lihat bagian 15).
+- Hemat RAM dan CPU saat beberapa repo dan terminal berjalan bersamaan (lihat bagian 15).
 
 **Bukan tujuan (versi awal)**
 - Mengedit file di dalam apps.
@@ -33,7 +33,6 @@ Tujuan utama adalah **tampilan dan navigasi**, bukan pengeditan kode. Apps ini t
 - Sinkronisasi cloud atau akun pengguna.
 - Dukungan platform selain macOS (iOS, Windows, Linux).
 - Membuka URL dari terminal.
-- Lebih dari 4 pane.
 
 ## 3. Platform dan Build
 
@@ -63,17 +62,21 @@ Jendela utama tidak punya sidebar. Isinya adalah **grid pane**, dengan gaya yang
 
 **Toolbar di atas**
 - Tombol **Buka repo** untuk memilih repo lewat dialog folder (`NSOpenPanel`).
-- Tombol **Tambah pane** (aktif selama pane kurang dari 4).
-- Indikator jumlah pane, misalnya "2 / 4".
-- Preset layout: 1 pane, 2 kolom, dan grid 2 × 2. Preset memudahkan pemilihan susunan tanpa menambah pane satu per satu. Default adalah 2 kolom.
+- Tombol **Tambah pane** untuk menambah slot bagi repo tersimpan yang belum tampil.
+- Indikator jumlah pane, misalnya "2 / 5" ketika ada lima repo tersimpan.
+- Menu tampilan menyediakan pilihan dari 1 hingga jumlah pane tersimpan. Pilihan 1 menampilkan pane aktif; pilihan lain menampilkan jumlah pane tersebut tanpa menghapus pane yang tersembunyi. Saat jumlah pilihan melebihi pane tersimpan, slot baru ditambahkan dan diisi repo tersimpan terbaru yang belum terlihat. Default adalah 2 pane.
 
 **Susunan pane**
 
 | Jumlah pane | Susunan |
 |---|---|
 | 1 | Satu pane penuh |
-| 2 | Kiri dan kanan |
-| 3 atau 4 | Grid 2 × 2. Slot yang belum dipakai berupa placeholder "Buka repo" |
+| 2 | Dua pane berdampingan |
+| 3 dan seterusnya | Grid seimbang dengan jumlah kolom `ceil(sqrt(jumlah pane))`; baris terakhir dapat memiliki slot kosong setelah pane terakhir |
+
+Jumlah pane bertambah saat repo baru dibuka ketika semua slot terisi. Slot yang belum dipakai tetap menampilkan placeholder **Buka repo**. Mengurangi jumlah pane yang ditampilkan hanya menyembunyikan pane lain; slot, hosting view yang sudah dibuat, repo, preferensi, dan sesi terminalnya tetap tersedia hingga pengguna menutup pane/repo secara eksplisit. Semua pane dipulihkan saat aplikasi dibuka kembali. Grid lebih dari empat pane berada pada area besar yang dapat digulir.
+
+Nama repo di header pane membuka pemilih daftar repo tersimpan. Memilih repo yang sudah menempati pane lain memindahkan slot pane tersebut ke tampilan dan menukar urutan slot tanpa menghentikan sesi; memilih repo tersimpan yang belum punya slot mempertahankan pane saat ini sebagai pane tersembunyi lalu memakai slot baru untuk repo pilihan.
 
 Setiap pane punya tiga bagian:
 
@@ -119,17 +122,17 @@ Ukuran ini diturunkan dari kebutuhan isi apps, bukan dari ukuran layar tertentu:
 | Satu pane | 680 × 440 | Header + area atas + area terminal |
 | Jendela utama (1 pane) | 680 × 500 | Toolbar + satu pane |
 | Jendela (2 pane) | 1.380 × 500 | Dua pane berdampingan dengan pembagi |
-| Jendela (3 atau 4 pane) | 1.380 × 940 | Grid 2 × 2 dengan pembagi |
+| Jendela dinamis | Berdasarkan baris dan kolom | Setiap pane menjaga lebar minimum 680 dan tinggi minimum 440; grid dapat digulir |
 
 - Pane tidak pernah lebih kecil dari ukuran minimumnya. Pembagi berhenti bergeser di batas ini.
 - Jika jendela lebih kecil dari yang dibutuhkan jumlah pane yang ada, pane tidak dihapus. Jendela menampilkan pesan agar diperbesar, dan pane yang tidak muat digulir (scroll).
-- Susunan grid 2 × 2 membutuhkan layar yang cukup besar. Di laptop kecil, pengguna sebaiknya memakai 2 pane atau maksimalkan pane.
+- Grid dengan banyak pane membutuhkan layar besar. Di layar kecil, grid digulir dan pengguna dapat memilih jumlah pane lebih sedikit atau memaksimalkan pane.
 
 ## 5. Manajemen Repo
 
 **Membuka repo**
 - Tombol **Buka repo** atau ⌘O membuka dialog pilih folder (`NSOpenPanel`).
-- Repo dibuka di pane yang sedang aktif. Jika pane aktif sudah berisi repo dan jumlah pane masih di bawah 4, repo dibuka di pane baru.
+- Repo dibuka di pane yang sedang aktif. Jika pane aktif sudah berisi repo, slot baru ditambahkan dan grid bertambah.
 - Option+klik pada repo di daftar repo tersimpan membuka repo di pane baru, walaupun pane aktif masih kosong.
 - Repo yang dipilih harus berupa folder kode dengan `.git`. Jika tidak, tampilkan pesan dan tidak membuka repo.
 - Folder dokumen atau data biasa tidak termasuk cakupan.
@@ -174,7 +177,7 @@ Diff berada di area atas setiap pane sebagai tab yang tidak bisa ditutup.
 - Baris ditambah berwarna hijau, baris dihapus berwarna merah.
 - Nomor baris ditampilkan di kedua sisi (lama dan baru).
 - Mode yang bisa dipilih: **split** (dua kolom) atau **unified** (satu kolom). Default mengikuti pengaturan.
-- Di pane kecil (grid 2 × 2), mode unified dipakai secara otomatis jika lebar area atas kurang dari batas minimum split.
+- Di pane kecil, mode unified dipakai secara otomatis jika lebar area atas kurang dari batas minimum split.
 
 **Navigasi**
 - ↑/↓ memilih file sebelumnya atau berikutnya di daftar file.
@@ -385,7 +388,7 @@ Apps ini harus tetap ringan walaupun 4 repo, banyak tab terminal, dan beberapa a
 - Log tidak menyertakan isi file atau isi terminal, hanya metadata kejadian.
 
 **Komponen utama**
-- UI: SwiftUI, dengan AppKit (`NSViewRepresentable`, `NSSplitViewController`) untuk grid pane dan pembagi. `NSSplitViewController` bersarang dipakai untuk susunan 2 × 2, karena kontrol SwiftUI bawaan untuk pembagi di macOS masih terbatas.
+- UI: SwiftUI, dengan AppKit (`NSViewRepresentable`, `NSSplitViewController`) untuk grid pane dinamis dan pembagi. Pembagi disusun per baris dan antarbaris; posisi masing-masing disimpan per split.
 - Terminal: SwiftTerm
 - Link provider: handler klik dan regex di SwiftTerm
 - Shell integration: script kecil untuk melacak cwd dan batas perintah
@@ -410,7 +413,7 @@ Pemisahan ini penting: sesi terminal hidup di model repo, sehingga pane bisa dit
 
 **Pengujian**
 - Unit test untuk parser path (Cmd+klik) dan parser diff.
-- Unit test untuk logika grid pane (batas 4, susunan 1 sampai 4 pane, dan pemindahan fokus).
+- Unit test untuk logika grid pane dinamis (susunan jumlah pane, geometri fokus, dan migrasi posisi pembagi lama).
 - Test manual untuk terminal (vim, htop, resize) di setiap jumlah pane.
 - Pengujian integrasi dengan repo contoh yang berisi perubahan staged, unstaged, dan untracked.
 - Pengujian worktree: dua worktree dari repo yang sama berdampingan, dengan diff dan sesi terminal masing-masing.
@@ -420,7 +423,7 @@ Pemisahan ini penting: sesi terminal hidup di model repo, sehingga pane bisa dit
 ## 15b. UI/UX
 
 **Identitas dan orientasi**
-- Setiap repo punya warna identitas kecil yang konsisten, dipakai di header pane dan di daftar repo tersimpan. Di grid 2 × 2, ini membantu mengenali pane tanpa membaca nama.
+- Setiap repo punya warna identitas kecil yang konsisten, dipakai di header pane dan di daftar repo tersimpan. Di grid padat, ini membantu mengenali pane tanpa membaca nama.
 - Penanda pane (titik kuning dan merah) disertai ikon atau teks singkat, tidak hanya warna, supaya tetap terbaca oleh pengguna yang buta warna.
 
 **Cmd+klik dan pencarian**
@@ -464,16 +467,20 @@ Setiap milestone bisa dipakai dan diuji sebelum lanjut ke berikutnya. Keputusan 
 *Kriteria selesai*: Cmd+klik `src/app.ts:42` membuka viewer dan langsung ke baris 42, dan path di output berwarna tetap terdeteksi. **[x] Tercapai.**
 
 **M3: Grid pane dan manajemen sesi**
-10. [x] Grid pane: 2 pane, lalu 3 dan 4 pane, dengan pembagi, preset layout di toolbar, fokus (⌘1–⌘4 dan ⌥⌘ panah), dan batas ukuran minimum.
+10. [x] Grid pane dinamis: pilih 1 sampai jumlah repo tersimpan, dengan baris seimbang, pembagi, fokus (⌘1–⌘4 dan ⌥⌘ panah), dan batas ukuran minimum.
 
-Tambahan 2026-10-24: menu **Layout** menyatukan tambah pane, preset, dan hitungan pane. Menu **•••** pada header menyediakan maksimalkan, mode terminal, tutup repo, dan tutup pane; pane terakhir tidak dapat ditutup, dan menutup pane tidak menghentikan sesi repo. Pane kosong menyediakan **Buka Repo…** serta menu repo terakhir. Status build/runtime tambahan dicatat di `TASK.md`.
+Tambahan 2026-10-24: menu **Layout** menyatukan tambah pane dan pilihan jumlah dinamis. Menu **•••** pada header menyediakan maksimalkan, mode terminal, dan tutup repo. Tombol **×** 32×32 pt di pojok kanan atas menutup pane; pane terakhir tidak dapat ditutup, dan menutup pane tidak menghentikan sesi repo. Pane kosong menyediakan **Buka Repo…** serta menu repo terakhir.
+
+Tambahan 2026-10-24: menu **Repo → Tutup Semua Repo dari Pane** memproses tiap pane, termasuk pane yang sedang tersembunyi. Pane dengan perintah terminal aktif menampilkan konfirmasi satu per satu; **Hentikan dan Tutup** menghentikan semua tab terminal repo itu lalu menutup repo dari pane, sedangkan **Jangan Tutup** mempertahankan repo dan sesi lalu lanjut ke pane berikutnya. Pane tanpa perintah aktif ditutup tanpa konfirmasi dan sesi idle tetap hidup. Repo tersimpan dan berkas di disk tidak dihapus.
+
+Tambahan 2026-10-24: dropdown repo hanya menampilkan path yang tersedia. **Kelola Repo Tersimpan** dapat dibuka dari dropdown atau menu **Repo**. Daftar menampilkan path untuk membedakan nama yang sama, pencarian, aksi hapus per entri, dan aksi hapus semua path yang tidak tersedia. Penghapusan mengonfirmasi bahwa sesi terminal repo dihentikan dan entri dilepas dari Gridline; folder repo dan worktree di disk tetap ada.
 11. [ ] Maksimalkan pane (⌃⌘M) dan maksimalkan terminal saja (⌥⌘M).
 12. [ ] Penanda pane yang butuh perhatian: titik kuning untuk selesai, merah untuk error, dengan ikon atau teks.
 13. [ ] Tutup repo dari pane (⌘⇧W) dengan toast "Repo ditutup · Buka lagi". Sesi tetap hidup.
 14. [ ] Layar pertama: grid kosong, placeholder repo terakhir, dan pemulihan jendela dan susunan pane.
 15. [ ] Worktree: dua worktree dari repo yang sama bisa berdampingan.
 
-*Kriteria selesai*: empat pane aktif bersamaan, repo ditutup lalu dibuka lagi tanpa menghentikan proses, dan penanda muncul di pane yang tidak aktif. **[ ] Belum tercapai.**
+*Kriteria selesai*: beberapa pane aktif bersamaan, repo ditutup lalu dibuka lagi tanpa menghentikan proses, dan penanda muncul di pane yang tidak aktif. **[ ] Belum tercapai.**
 
 **M4: Fitur tambahan dan pemakaian harian**
 16. [ ] Viewer sebagai panel samping diff (default tetap tab, disimpan per pane).
@@ -493,7 +500,7 @@ Tambahan 2026-10-24: menu **Layout** menyatukan tambah pane, preset, dan hitunga
 | Arsitektur | Apple Silicon (arm64) saja |
 | Sandbox dan distribusi | Tanpa App Sandbox, Hardened Runtime aktif, Developer ID dengan notarization. Untuk pemakaian pribadi, tidak untuk App Store |
 | Sidebar | Tidak ada. Repo dibuka lewat toolbar, ⌘O, dan ⌘P |
-| Layout | Grid pane, maksimal 4 (2 × 2) |
+| Layout | Grid pane dinamis; jumlah pilihan mengikuti repo tersimpan |
 | Panel per repo | Diff dan viewer di atas, terminal di bawah |
 | Membuka URL dari terminal | Tidak di versi awal |
 | Batas ukuran file teks | 5 MB |

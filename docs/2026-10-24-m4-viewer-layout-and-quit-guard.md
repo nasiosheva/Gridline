@@ -4,7 +4,7 @@
 
 Implementasi ini mengerjakan checklist 16–21: pilihan viewer berdampingan dengan diff per pane, konfirmasi saat keluar ketika terminal masih menjalankan proses, quick switcher repo/file dengan pencarian, warna identitas repo, menu/overlay pintasan, mode fokus diff, status kerja repo/notifikasi, filter diff, drag folder, perbandingan branch, pengaturan scrollback, dan ekspor diagnostik.
 
-Permintaan tambahan UI sederhana: toolbar memakai satu menu **Layout** untuk tambah pane dan preset; header repo memakai satu menu **•••** untuk maksimalkan, mode terminal, tutup repo, dan tutup pane. Pane kosong menjadikan **Buka Repo…** aksi utama dan repo terakhir sebagai menu. Tutup pane mempertahankan repo dan sesi terminal di registry, tidak menutup pane terakhir, dan memilih tetangga jika pane aktif ditutup.
+Permintaan tambahan UI sederhana: toolbar memakai satu menu **Layout** untuk tambah pane dan mode tampilan; header repo memakai satu menu **•••** untuk maksimalkan, mode terminal, tutup repo, dan tutup pane. Pane kosong menjadikan **Buka Repo…** aksi utama dan repo terakhir sebagai menu. Tutup pane mempertahankan repo dan sesi terminal di registry, tidak menutup pane terakhir, dan memilih tetangga jika pane aktif ditutup.
 
 ## Perubahan
 
@@ -23,7 +23,10 @@ Permintaan tambahan UI sederhana: toolbar memakai satu menu **Layout** untuk tam
 - Panel Diff kini bisa memilih branch dasar dan branch tujuan. Daftar file dan isi diff memakai `git diff <base>...<target>`, sehingga hanya perubahan di branch tujuan sejak titik percabangan bersama yang ditampilkan. Pemilihan branch lokal satu arah untuk membandingkan working tree tetap tersedia. Filter waktu sepuluh menit disembunyikan pada mode branch-to-branch karena timestamp working tree tidak mewakili waktu perubahan pada branch tersebut.
 - Pemilih branch **Local Changes** di panel Diff memakai popover dengan kolom pencarian selalu terlihat, filter tanpa membedakan huruf besar/kecil, dan aksi × untuk mengosongkan query. Copy pencarian dipakai bersama pemilih worktree dalam katalog lokal.
 - Pilihan perbandingan Diff terakhir (working tree terhadap satu branch atau dua branch) kini disimpan per repo dan dipulihkan saat app dibuka lagi. Jika branch yang disimpan sudah dihapus, panel kembali ke Local Changes dan state lama dibersihkan. Default perbandingan awal worktree juga dicatat saat pertama kali dipakai.
-- Mengubah layout menjadi lebih sedikit pane kini mempertahankan pane aktif. Sebelumnya `setPreset` selalu menyimpan slot awal, sehingga pane worktree aktif pada slot berikutnya hilang dan repo dasar tampak kembali setelah reopen.
+- Sebelum pemisahan jumlah tampilan dan slot pane, pengurangan layout mempertahankan pane yang berisi repo dan mengonfirmasi command aktif. Grid saat ini hanya menyembunyikan pane di luar jumlah tampilan, mempertahankan semua slot, dan memberi konfirmasi sebelum menyembunyikan pane dengan command aktif.
+- Jumlah pane yang ditampilkan sekarang dapat dipilih dari 1 sampai jumlah pane tersimpan. Pergantian ke satu pane atau grid yang lebih kecil hanya menyembunyikan pane lain; slot, repo, dan sesi terminalnya tetap tersimpan sampai ditutup secara eksplisit. Pane aktif tetap masuk ke tampilan. Grid lebih dari empat pane tetap berupa satu area multi-baris yang dapat digulir. Saat grid diperbesar melewati jumlah slot, slot baru diisi repo tersimpan terbaru yang belum terlihat. Konfigurasi divider disimpan per baris dan per grid.
+- Pane yang pernah tampil mempertahankan `NSHostingController` saat disembunyikan dari mode grid yang lebih kecil atau Single View. Host dilepas dari hierarchy split sementara dan digunakan lagi saat pane ditampilkan kembali; host baru dilepas saat slot pane ditutup.
+- Header pane menyediakan pemilih semua repo tersimpan. Repo di pane tersembunyi dapat dipindahkan ke tampilan dengan menukar posisi slot dan mempertahankan identitas/host view; repo baru ke workspace mendapat slot baru agar repo yang tergeser tetap siap ditampilkan.
 - Saat jendela muncul kembali dalam proses app yang sama, registry memaksa refresh status Git dan daftar branch untuk repo yang masih terlihat. Ini menangani checkout bersih yang hanya mengubah `.git/HEAD` dan tidak memicu watcher direktori repo.
 - Selama pane terlihat, `GitHEADWatcher` memantau direktori metadata Git dan hanya meminta refresh bila isi `HEAD` berubah. File `.git` pada worktree diikuti ke gitdir yang sebenarnya; watcher berhenti saat pane tidak terlihat. Ini memperbarui branch setelah checkout bersih tanpa pemindaian Git pada setiap prompt terminal.
 - Pemeriksaan lokal `GitHEADWatcher` menangkap checkout bersih pada repo utama dan linked worktree sementara; perubahan metadata `.git` yang tidak mengubah `HEAD` tidak memicu refresh, dan watcher yang dihentikan tidak mengirim event lagi. Pengujian memakai repo sementara dan tidak mengubah checkout pengguna.
@@ -47,6 +50,8 @@ Build Xcode penuh tetap terhenti di SwiftPM: upaya awal tidak dapat menulis mani
 
 Typecheck seluruh source Swift dengan target arm64/macOS 27 berhasil setelah fitur Tutup pane ditambahkan. Tidak ada error; hanya dua warning yang sudah ada di `GridlineApp.swift` (Selector) dan `RepoPaneView.swift` (weak capture), serta diagnostik sandbox dari subprocess compiler. Build Xcode GUI dan smoke test visual masih belum terverifikasi.
 
+Untuk perubahan grid dinamis di sesi ini, pemeriksaan dibatasi pada source dan `git diff --check`; build dan test tidak dijalankan sesuai permintaan.
+
 
 ## Lokalisasi
 
@@ -68,3 +73,24 @@ Typecheck seluruh source Swift dengan target arm64/macOS 27 berhasil setelah fit
 - Saat delegate menerima `applicationWillTerminate`, ia memanggil `terminate()` pada setiap terminal di registry. SwiftTerm mengirim SIGTERM ke shell child; membebaskan objek SwiftTerm sendiri tidak menjamin sinyal itu dikirim.
 - SwiftTerm checkout yang dipakai sudah memiliki backpressure pada antrean output: pembacaan PTY berhenti ketika antrean pending melewati 4 MiB dan dilanjutkan saat turun di bawah 1 MiB. Pemrosesan antrean juga dibagi per time slice 4 ms.
 - Typecheck source berhasil. Pengukuran beban multi-pane dan smoke test GUI belum dilakukan; build Xcode tetap terkendala penulisan cache SwiftPM di sandbox.
+
+## Tutup semua repo dari pane
+
+- Menu **Repo → Tutup Semua Repo dari Pane** mengantrekan semua pane berisi repo, termasuk pane yang saat ini tersembunyi.
+- Perintah terminal aktif memicu dialog satu per satu. **Hentikan dan Tutup** menghentikan semua tab terminal milik repo dan mengosongkan pane; **Jangan Tutup** membiarkan repo dan sesi tetap berjalan lalu melanjutkan antrean.
+- Pane tanpa perintah aktif dikosongkan tanpa dialog, sedangkan sesi idle dipertahankan sesuai perilaku dasar menutup pane.
+- Aksi ini hanya mengubah isi pane dan sesi terminal yang dikonfirmasi; repo tersimpan dan worktree di disk tidak dihapus.
+- Build dan runtime untuk perubahan ini belum diverifikasi.
+
+## Kelola repo tersimpan
+
+- Aksi **Kelola Repo Tersimpan** ada di dropdown header pane dan menu **Repo**. Dropdown hanya menampilkan path yang tersedia; pengelola menyediakan pencarian, path lengkap untuk membedakan label yang sama, dan tombol hapus tiap entri.
+- **Hapus repo yang tidak tersedia** membersihkan entri yang folder atau metadata Git-nya sudah tidak ada.
+- Semua penghapusan dikonfirmasi, menghapus referensi dari state Gridline, dan menghentikan sesi terminal terkait. Folder repository dan worktree di disk tidak dihapus.
+- Parser seluruh source Swift lolos. Build Debug belum mencapai kompilasi: resolver awal gagal mengakses GitHub karena DNS; percobaan dengan dependency lokal lalu tertahan oleh akses cache SwiftPM dan plugin macro SwiftUI yang dibatasi sandbox. Build dan runtime masih belum terverifikasi.
+
+## Tombol tutup pane
+
+- Pane berisi repo, pane kosong, dan pane dengan path repo hilang kini memiliki tombol **×** 32×32 pt di pojok kanan atas.
+- Tombol melepas pane tanpa menghentikan sesi repo; tombol dinonaktifkan pada pane terakhir.
+- Parser source Swift dan `git diff --check` lolos. Build GUI belum bisa dijalankan hingga kendala cache SwiftPM/sandbox teratasi.
