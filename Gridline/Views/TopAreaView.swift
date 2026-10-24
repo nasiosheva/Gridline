@@ -2,9 +2,7 @@
 //  TopAreaView.swift
 //  Gridline
 //
-//  Area atas pane: tab bar dengan tab "Diff" (selalu ada, tidak bisa
-//  ditutup) dan tab viewer file yang bisa ditutup (bagian 4 apps-spec.md).
-//  Menu overflow untuk tab yang tidak muat ditunda ke M4 (lihat TASK.md).
+//  Area atas pane: tab bar dengan tab "Diff" dan tab viewer file.
 //
 
 import SwiftUI
@@ -14,6 +12,7 @@ struct TopAreaView: View {
     @ObservedObject var diffStore: RepoDiffStore
     let viewerAsSidePanel: Bool
     var onToggleViewerAsSidePanel: () -> Void
+    @State private var showsOpenTabs = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,40 +20,55 @@ struct TopAreaView: View {
             Divider()
             content
         }
+        .sheet(isPresented: $showsOpenTabs) {
+            OpenTabsView(store: topAreaStore)
+        }
     }
 
     private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 2) {
-                TopTabChip(
-                    title: String(localized: L10n.TopArea.diffTab),
-                    isActive: topAreaStore.selection == .diff,
-                    isClosable: false,
-                    onSelect: { topAreaStore.selection = .diff },
-                    onClose: {}
-                )
-
-                ForEach(topAreaStore.openFiles) { tab in
+        HStack(spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 2) {
                     TopTabChip(
-                        title: tab.displayName,
-                        isActive: topAreaStore.selection == .file(tab.id),
-                        isClosable: true,
-                        onSelect: { topAreaStore.selection = .file(tab.id) },
-                        onClose: { topAreaStore.closeFile(id: tab.id) }
+                        title: String(localized: L10n.TopArea.diffTab),
+                        isActive: topAreaStore.selection == .diff,
+                        isClosable: false,
+                        onSelect: { topAreaStore.selection = .diff },
+                        onClose: {}
                     )
+
+                    ForEach(topAreaStore.openFiles) { tab in
+                        TopTabChip(
+                            title: tab.displayName,
+                            isActive: topAreaStore.selection == .file(tab.id),
+                            isClosable: true,
+                            onSelect: { topAreaStore.selection = .file(tab.id) },
+                            onClose: { topAreaStore.closeFile(id: tab.id) }
+                        )
+                    }
                 }
+                .padding(.horizontal, 4)
+            }
 
-                Spacer(minLength: 8)
-
-                Button(action: onToggleViewerAsSidePanel) {
-                    Image(systemName: viewerAsSidePanel ? "rectangle.split.2x1" : "sidebar.right")
+            if topAreaStore.openFiles.count > 3 {
+                Button {
+                    showsOpenTabs = true
+                } label: {
+                    Image(systemName: "list.bullet")
                 }
                 .buttonStyle(.plain)
-                .help(viewerAsSidePanel ? L10n.TopArea.showViewerAsTab : L10n.TopArea.showViewerBesideDiff)
-                .accessibilityLabel(viewerAsSidePanel ? L10n.TopArea.showViewerAsTab : L10n.TopArea.showViewerBesideDiff)
+                .help(L10n.TopArea.openTabs)
+                .accessibilityLabel(L10n.TopArea.openTabs)
             }
-            .padding(.horizontal, 4)
+
+            Button(action: onToggleViewerAsSidePanel) {
+                Image(systemName: viewerAsSidePanel ? "rectangle.split.2x1" : "sidebar.right")
+            }
+            .buttonStyle(.plain)
+            .help(viewerAsSidePanel ? L10n.TopArea.showViewerAsTab : L10n.TopArea.showViewerBesideDiff)
+            .accessibilityLabel(viewerAsSidePanel ? L10n.TopArea.showViewerAsTab : L10n.TopArea.showViewerBesideDiff)
         }
+        .padding(.horizontal, 4)
         .frame(height: 28)
     }
 

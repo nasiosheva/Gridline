@@ -27,17 +27,17 @@ struct RepoPaneView: View {
     @EnvironmentObject private var sessionStore: RepoSessionStore
     @EnvironmentObject private var diffStoreRegistry: RepoDiffStoreRegistry
     @EnvironmentObject private var topAreaStoreRegistry: TopAreaStoreRegistry
-    @State private var status: RepoHeaderStatus?
     @State private var toast: PaneToast?
     @State private var ambiguousPicker: AmbiguousLinkPicker?
 
     var body: some View {
         let topAreaStore = topAreaStoreRegistry.store(for: repo)
+        let diffStore = diffStoreRegistry.store(for: repo)
 
         VStack(spacing: 0) {
             RepoPaneHeaderView(
                 repo: repo,
-                status: status,
+                diffStore: diffStore,
                 attention: session.attention,
                 workStatus: session.workStatus,
                 isMaximized: isMaximized,
@@ -59,7 +59,7 @@ struct RepoPaneView: View {
                 ) {
                     TopAreaView(
                         topAreaStore: topAreaStore,
-                        diffStore: diffStoreRegistry.store(for: repo),
+                        diffStore: diffStore,
                         viewerAsSidePanel: viewerAsSidePanel,
                         onToggleViewerAsSidePanel: onToggleViewerAsSidePanel
                     )
@@ -80,12 +80,7 @@ struct RepoPaneView: View {
                 guard let topAreaStore else { return }
                 handleLinkTarget(target, topAreaStore: topAreaStore)
             }
-            await refreshStatus()
         }
-    }
-
-    private func refreshStatus() async {
-        status = await GitService.headerStatus(at: repo.path)
     }
 
     /// Menindaklanjuti hasil Cmd+klik sebuah path di terminal (bagian 9

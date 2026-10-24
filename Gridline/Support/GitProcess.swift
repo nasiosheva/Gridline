@@ -3,9 +3,9 @@
 //  Gridline
 //
 //  Helper umum untuk memanggil `git` lewat `Process`. Semua pemanggilan Git
-//  di aplikasi (status, diff) melewati sini agar konsisten: baca saja, dan
-//  untuk perintah yang memantau working tree selalu lewat `GitService`/
-//  `GitDiffService` yang menambahkan `--no-optional-locks` (D8).
+//  di aplikasi melewati sini. Status dan diff bersifat baca saja serta memakai
+//  `--no-optional-locks`; `GitWorktreeService` menjalankan `worktree add` hanya
+//  setelah pengguna memilih branch untuk pane baru.
 //
 
 import Foundation
@@ -25,24 +25,56 @@ enum GitProcess {
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
+            let stdoutBuffer = PipeOutputBuffer()
+            let stderrBuffer = PipeOutputBuffer()
+            let readers = DispatchGroup()
+            readers.enter()
+            readers.enter()
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
 
             process.terminationHandler = { proc in
-                let outData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                let errData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                continuation.resume(returning: Output(
-                    exitCode: proc.terminationStatus,
-                    stdout: String(data: outData, encoding: .utf8) ?? "",
-                    stderr: String(data: errData, encoding: .utf8) ?? ""
-                ))
+                readers.notify(queue: .global(qos: .utility)) {
+                    continuation.resume(returning: Output(
+                        exitCode: proc.terminationStatus,
+                        stdout: stdoutBuffer.string,
+                        stderr: stderrBuffer.string
+                    ))
+                }
             }
 
             do {
                 try process.run()
             } catch {
+                process.terminationHandler = nil
+                try? stdoutPipe.fileHandleForWriting.close()
+                try? stderrPipe.fileHandleForWriting.close()
+                try? stdoutPipe.fileHandleForReading.close()
+                try? stderrPipe.fileHandleForReading.close()
+                readers.leave()
+                readers.leave()
                 continuation.resume(returning: Output(exitCode: -1, stdout: "", stderr: error.localizedDescription))
+                return
             }
+
+            // Close the parent's write handles. The child owns its duplicated
+            // handles; closing these lets each reader observe EOF on exit.
+            try? stdoutPipe.fileHandleForWriting.close()
+            try? stderrPipe.fileHandleForWriting.close()
+            read(stdoutPipe.fileHandleForReading, into: stdoutBuffer, readers: readers)
+            read(stderrPipe.fileHandleForReading, into: stderrBuffer, readers: readers)
+        }
+    }
+
+    private static func read(_ handle: FileHandle, into buffer: PipeOutputBuffer, readers: DispatchGroup) {
+        handle.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil
+                readers.leave()
+                return
+            }
+            buffer.append(data)
         }
     }
 
@@ -54,5 +86,22 @@ enum GitProcess {
 
     static var isGitAvailable: Bool {
         FileManager.default.isExecutableFile(atPath: "/usr/bin/git")
+    }
+}
+
+private final class PipeOutputBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func append(_ value: Data) {
+        lock.lock()
+        data.append(value)
+        lock.unlock()
+    }
+
+    var string: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return String(data: data, encoding: .utf8) ?? ""
     }
 }

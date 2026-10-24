@@ -52,6 +52,22 @@
         }
       }
     },
+    "common.clear_search" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear search"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hapus pencarian"
+          }
+        }
+      }
+    },
     "common.copy_diff" : {
       "localizations" : {
         "en" : {
@@ -80,6 +96,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Salin Path"
+          }
+        }
+      }
+    },
+    "common.done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selesai"
           }
         }
       }
@@ -260,18 +292,114 @@
         }
       }
     },
-    "diff.compare_branch_help" : {
+    "diff.apply_branch_comparison" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Compare with a local branch"
+            "value" : "Compare"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bandingkan dengan branch lokal"
+            "value" : "Bandingkan"
+          }
+        }
+      }
+    },
+    "diff.base_branch" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Base branch"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Branch dasar"
+          }
+        }
+      }
+    },
+    "diff.branch_comparison_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ → %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ → %@"
+          }
+        }
+      }
+    },
+    "diff.branch_comparison_explanation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows changes in the target branch since it diverged from the base branch."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menampilkan perubahan branch tujuan sejak bercabang dari branch dasar."
+          }
+        }
+      }
+    },
+    "diff.compare_branch_help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose local changes or compare branches"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pilih perubahan lokal atau bandingkan branch"
+          }
+        }
+      }
+    },
+    "diff.compare_branches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compare Branches…"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bandingkan Branch…"
+          }
+        }
+      }
+    },
+    "diff.compared_branches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes in %@ since diverging from %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perubahan di %@ sejak bercabang dari %@"
           }
         }
       }
@@ -484,6 +612,22 @@
         }
       }
     },
+    "diff.not_enough_branches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "At least two local branches are required"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dibutuhkan setidaknya dua branch lokal"
+          }
+        }
+      }
+    },
     "diff.no_changes" : {
       "localizations" : {
         "en" : {
@@ -624,6 +768,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "10 Menit"
+          }
+        }
+      }
+    },
+    "diff.target_branch" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Target branch"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Branch tujuan"
           }
         }
       }
@@ -772,6 +932,22 @@
         }
       }
     },
+    "menu.clear_terminal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Terminal"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bersihkan Terminal"
+          }
+        }
+      }
+    },
     "menu.close_active_repository" : {
       "localizations" : {
         "en" : {
@@ -816,22 +992,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cari di Viewer"
-          }
-        }
-      }
-    },
-    "menu.clear_terminal" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clear Terminal"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bersihkan Terminal"
           }
         }
       }
@@ -1540,6 +1700,22 @@
         }
       }
     },
+    "repository.worktree_display_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — %@"
+          }
+        }
+      }
+    },
     "settings.diagnostics" : {
       "localizations" : {
         "en" : {
@@ -1620,22 +1796,6 @@
         }
       }
     },
-    "shortcut.close_active_tab" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close active tab"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tutup tab aktif"
-          }
-        }
-      }
-    },
     "shortcut.clear_terminal" : {
       "localizations" : {
         "en" : {
@@ -1648,6 +1808,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bersihkan terminal"
+          }
+        }
+      }
+    },
+    "shortcut.close_active_tab" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close active tab"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tutup tab aktif"
           }
         }
       }
@@ -1828,22 +2004,6 @@
         }
       }
     },
-    "terminal.close_tab" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close Tab"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tutup Tab"
-          }
-        }
-      }
-    },
     "terminal.close_running_tab_message" : {
       "localizations" : {
         "en" : {
@@ -1872,6 +2032,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tutup tab terminal ini?"
+          }
+        }
+      }
+    },
+    "terminal.close_tab" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Tab"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tutup Tab"
           }
         }
       }
@@ -1920,6 +2096,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tab Terminal Baru"
+          }
+        }
+      }
+    },
+    "terminal.open_tabs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Terminal Tabs"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka Tab Terminal"
           }
         }
       }
@@ -1988,6 +2180,22 @@
         }
       }
     },
+    "top_area.close_other_tabs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Other Tabs"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tutup Tab Lain"
+          }
+        }
+      }
+    },
     "top_area.diff_tab" : {
       "localizations" : {
         "en" : {
@@ -2000,6 +2208,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diff"
+          }
+        }
+      }
+    },
+    "top_area.open_tabs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Open Tabs"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tampilkan Tab Terbuka"
+          }
+        }
+      }
+    },
+    "top_area.search_open_tabs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search Open Tabs"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cari Tab Terbuka"
           }
         }
       }
@@ -2228,6 +2468,22 @@
         }
       }
     },
+    "workspace.clear_recent_repositories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear Recent"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bersihkan Daftar Terakhir"
+          }
+        }
+      }
+    },
     "workspace.close_repository_title" : {
       "localizations" : {
         "en" : {
@@ -2340,6 +2596,22 @@
         }
       }
     },
+    "workspace.no_recent_repositories" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Recent Repositories"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak Ada Repositori Terakhir"
+          }
+        }
+      }
+    },
     "workspace.open_repository" : {
       "localizations" : {
         "en" : {
@@ -2436,38 +2708,6 @@
         }
       }
     },
-    "workspace.clear_recent_repositories" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clear Recent"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bersihkan Daftar Terakhir"
-          }
-        }
-      }
-    },
-    "workspace.no_recent_repositories" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No Recent Repositories"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tidak Ada Repositori Terakhir"
-          }
-        }
-      }
-    },
     "workspace.repository_closed_message" : {
       "localizations" : {
         "en" : {
@@ -2480,6 +2720,214 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld proses terminal masih berjalan. Sesi tetap aktif dan dapat dibuka kembali."
+          }
+        }
+      }
+    },
+    "worktree.alert_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could Not Open Branch"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Branch Tidak Dapat Dibuka"
+          }
+        }
+      }
+    },
+    "worktree.operation_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not prepare this worktree: %@"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Worktree ini tidak dapat disiapkan: %@"
+          }
+        }
+      }
+    },
+    "worktree.load_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not load local branches."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Branch lokal tidak dapat dimuat."
+          }
+        }
+      }
+    },
+    "worktree.loading_branches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading branches…"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memuat branch…"
+          }
+        }
+      }
+    },
+    "worktree.opening_branch" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opening branch…"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Membuka branch…"
+          }
+        }
+      }
+    },
+    "worktree.no_other_branches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No other local branches available."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada branch lokal lain."
+          }
+        }
+      }
+    },
+    "common.no_matching_branches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No branches match your search."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tidak ada branch yang cocok dengan pencarian."
+          }
+        }
+      }
+    },
+    "common.search_branches" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search branches"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cari branch"
+          }
+        }
+      }
+    },
+    "worktree.open_branch_in_new_pane" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Branch in New Pane…"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka Branch di Pane Baru…"
+          }
+        }
+      }
+    },
+    "worktree.pane_limit_reached" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empty a pane or close one before opening this branch."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kosongkan atau tutup pane sebelum membuka branch ini."
+          }
+        }
+      }
+    },
+    "worktree.path_already_exists" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The managed worktree folder already exists. Move it or remove it, then try again."
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder worktree terkelola sudah ada. Pindahkan atau hapus folder itu, lalu coba lagi."
+          }
+        }
+      }
+    },
+    "worktree.choose_branch_again" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Branch Again…"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pilih Branch Lagi…"
+          }
+        }
+      }
+    },
+    "worktree.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Branch in New Pane"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka Branch di Pane Baru"
           }
         }
       }

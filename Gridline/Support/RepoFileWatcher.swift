@@ -13,12 +13,11 @@ import Foundation
 final class RepoFileWatcher {
     private var stream: FSEventStreamRef?
     private let onChange: () -> Void
-    private var debounceWorkItem: DispatchWorkItem?
-    private let debounceInterval: TimeInterval
+    private let latency: TimeInterval
 
-    init(path: String, debounceInterval: TimeInterval = 0.4, onChange: @escaping () -> Void) {
+    init(path: String, latency: TimeInterval = 0.4, onChange: @escaping () -> Void) {
         self.onChange = onChange
-        self.debounceInterval = debounceInterval
+        self.latency = latency
         start(path: path)
     }
 
@@ -36,34 +35,31 @@ final class RepoFileWatcher {
         )
 
         let pathsToWatch = [path] as CFArray
-        let flags = UInt32(kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagWatchRoot)
+        let flags = UInt32(kFSEventStreamCreateFlagWatchRoot)
 
         guard let streamRef = FSEventStreamCreate(
             kCFAllocatorDefault,
             { (_, clientCallBackInfo, _, _, _, _) in
                 guard let info = clientCallBackInfo else { return }
                 let watcher = Unmanaged<RepoFileWatcher>.fromOpaque(info).takeUnretainedValue()
-                watcher.scheduleDebouncedCallback()
+                watcher.onChange()
             },
             &context,
             pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            debounceInterval,
+            latency,
             flags
         ) else { return }
+
+        let gitMetadataPath = (path as NSString).appendingPathComponent(".git")
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: gitMetadataPath, isDirectory: &isDirectory), isDirectory.boolValue {
+            _ = FSEventStreamSetExclusionPaths(streamRef, [gitMetadataPath] as CFArray)
+        }
 
         stream = streamRef
         FSEventStreamSetDispatchQueue(streamRef, DispatchQueue.main)
         FSEventStreamStart(streamRef)
-    }
-
-    private func scheduleDebouncedCallback() {
-        debounceWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.onChange()
-        }
-        debounceWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: workItem)
     }
 
     func stop() {
@@ -72,6 +68,5 @@ final class RepoFileWatcher {
         FSEventStreamInvalidate(stream)
         FSEventStreamRelease(stream)
         self.stream = nil
-        debounceWorkItem?.cancel()
     }
 }

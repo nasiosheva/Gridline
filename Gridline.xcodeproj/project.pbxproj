@@ -8,15 +8,30 @@
 
 /* Begin PBXBuildFile section */
 		27DEA61603431F08D5B6C3EF /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A1CE379D34C8ED22AA3D6BF6 /* SwiftTerm */; };
+		B17C0A000000000000000001 /* Gridline/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B17C0A000000000000000002 /* Gridline/Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A54C86DA308A60EA003328DB /* Gridline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gridline.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B17C0A000000000000000002 /* Gridline/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Gridline/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B17C0A000000000000000003 /* Exceptions for "Gridline" folder in "Gridline" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+			);
+			target = A54C86D9308A60EA003328DB /* Gridline */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A54C86DC308A60EA003328DB /* Gridline */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B17C0A000000000000000003 /* Exceptions for "Gridline" folder in "Gridline" target */,
+			);
 			path = Gridline;
 			sourceTree = "<group>";
 		};
@@ -32,11 +47,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		A526D327308C8F9E00F6ED3D /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				B17C0A000000000000000002 /* Gridline/Assets.xcassets */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		A54C86D1308A60EA003328DB = {
 			isa = PBXGroup;
 			children = (
 				A54C86DC308A60EA003328DB /* Gridline */,
 				A54C86DB308A60EA003328DB /* Products */,
+				A526D327308C8F9E00F6ED3D /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -114,6 +138,7 @@
 		A54C86D8308A60EA003328DB /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				B17C0A000000000000000001 /* Gridline/Assets.xcassets in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */

@@ -3,15 +3,15 @@
 //  Gridline
 //
 //  Gutter nomor baris untuk viewer file read-only (bagian 7 apps-spec.md).
-//  Indeks awal setiap baris dihitung sekali per perubahan teks (bukan per
-//  frame saat scroll) supaya tetap responsif untuk file sampai 5 MB.
+//  Indeks awal baris disiapkan di worker saat file dimuat dan dipakai ulang
+//  saat tab berpindah, supaya gutter tidak memindai ulang teks di main thread.
 //
 
 import AppKit
 
 final class LineNumberRulerView: NSRulerView {
     private weak var codeTextView: NSTextView?
-    private var lineStartOffsets: [Int] = [0]
+    private var lineStartOffsets: [UInt32] = [0]
 
     init(textView: NSTextView) {
         self.codeTextView = textView
@@ -24,16 +24,7 @@ final class LineNumberRulerView: NSRulerView {
         fatalError("init(coder:) is not supported")
     }
 
-    func rebuildLineIndex(text: String) {
-        var offsets: [Int] = [0]
-        let nsString = text as NSString
-        var searchStart = 0
-        while searchStart < nsString.length {
-            let range = nsString.range(of: "\n", range: NSRange(location: searchStart, length: nsString.length - searchStart))
-            guard range.location != NSNotFound else { break }
-            offsets.append(range.location + 1)
-            searchStart = range.location + 1
-        }
+    func setLineStartOffsets(_ offsets: [UInt32]) {
         lineStartOffsets = offsets
         needsDisplay = true
     }
@@ -41,9 +32,10 @@ final class LineNumberRulerView: NSRulerView {
     private func lineNumber(forCharacterIndex index: Int) -> Int {
         var low = 0
         var high = lineStartOffsets.count - 1
+        let characterIndex = UInt32(clamping: index)
         while low < high {
             let mid = (low + high + 1) / 2
-            if lineStartOffsets[mid] <= index {
+            if lineStartOffsets[mid] <= characterIndex {
                 low = mid
             } else {
                 high = mid - 1

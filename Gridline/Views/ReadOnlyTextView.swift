@@ -14,6 +14,8 @@ import SwiftUI
 
 struct ReadOnlyTextView: NSViewRepresentable {
     let text: String
+    let lineStartOffsets: [UInt32]
+    let contentVersion: UUID
     var scrollToLine: Int?
     var onDidConsumeScrollRequest: () -> Void = {}
 
@@ -47,14 +49,14 @@ struct ReadOnlyTextView: NSViewRepresentable {
         scrollView.borderType = .noBorder
 
         let ruler = LineNumberRulerView(textView: textView)
-        ruler.rebuildLineIndex(text: text)
+        ruler.setLineStartOffsets(lineStartOffsets)
         scrollView.verticalRulerView = ruler
         scrollView.hasVerticalRuler = true
         scrollView.rulersVisible = true
 
         context.coordinator.textView = textView
         context.coordinator.ruler = ruler
-        context.coordinator.lastText = text
+        context.coordinator.contentVersion = contentVersion
 
         return scrollView
     }
@@ -62,10 +64,10 @@ struct ReadOnlyTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = context.coordinator.textView else { return }
 
-        if context.coordinator.lastText != text {
+        if context.coordinator.contentVersion != contentVersion {
             textView.string = text
-            context.coordinator.ruler?.rebuildLineIndex(text: text)
-            context.coordinator.lastText = text
+            context.coordinator.ruler?.setLineStartOffsets(lineStartOffsets)
+            context.coordinator.contentVersion = contentVersion
         }
 
         if let line = scrollToLine {
@@ -100,6 +102,6 @@ struct ReadOnlyTextView: NSViewRepresentable {
     final class Coordinator {
         var textView: NSTextView?
         var ruler: LineNumberRulerView?
-        var lastText: String = ""
+        var contentVersion: UUID?
     }
 }

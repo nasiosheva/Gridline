@@ -82,43 +82,46 @@ private struct DiffFileListView: View {
     let onOpenFile: (String) -> Void
     @State private var showRecentOnly = false
     @State private var hideLargeFiles = false
+    @State private var showsBranchComparison = false
+    @State private var showsBranchPicker = false
 
-    private var visibleEntries: [DiffFileEntry] {
+    private var filteredEntries: [DiffFileEntry] {
         store.displayedEntries.filter { entry in
-            (!showRecentOnly || DiffVisibilityPolicy.isRecent(entry))
+            (!showRecentOnly || store.isComparingBranches || DiffVisibilityPolicy.isRecent(entry))
                 && (!hideLargeFiles || !DiffVisibilityPolicy.isLarge(entry))
         }
     }
 
-    private var visibleStaged: [DiffFileEntry] { visibleEntries.filter { $0.group == .staged } }
-    private var visibleUnstaged: [DiffFileEntry] { visibleEntries.filter { $0.group == .unstaged } }
-    private var visibleUntracked: [DiffFileEntry] { visibleEntries.filter { $0.group == .untracked } }
-
     var body: some View {
+        let visibleEntries = filteredEntries
+        let visibleStaged = visibleEntries.filter { $0.group == .staged }
+        let visibleUnstaged = visibleEntries.filter { $0.group == .unstaged }
+        let visibleUntracked = visibleEntries.filter { $0.group == .untracked }
+
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Menu {
-                    Button(L10n.Diff.localChanges) {
-                        store.selectComparisonBranch(nil)
-                    }
-                    if !store.availableComparisonBranches.isEmpty {
-                        Divider()
-                        ForEach(store.availableComparisonBranches, id: \.self) { branch in
-                            Button(branch) {
-                                store.selectComparisonBranch(branch)
-                            }
-                        }
-                    }
+                Button {
+                    showsBranchPicker = true
                 } label: {
-                    Label(store.comparisonBranch ?? String(localized: L10n.Diff.localChanges), systemImage: "arrow.triangle.branch")
+                    Label(comparisonLabel, systemImage: "arrow.triangle.branch")
                         .lineLimit(1)
                 }
-                .menuStyle(.borderlessButton)
+                .buttonStyle(.borderless)
                 .help(L10n.Diff.compareBranchHelp)
+                .popover(isPresented: $showsBranchPicker, arrowEdge: .bottom) {
+                    DiffBranchPickerPopover(store: store) {
+                        showsBranchPicker = false
+                        DispatchQueue.main.async {
+                            showsBranchComparison = true
+                        }
+                    }
+                }
 
-                Toggle(L10n.Diff.tenMinutes, isOn: $showRecentOnly)
-                    .toggleStyle(.button)
-                    .help(L10n.Diff.recentFilterHelp)
+                if !store.isComparingBranches {
+                    Toggle(L10n.Diff.tenMinutes, isOn: $showRecentOnly)
+                        .toggleStyle(.button)
+                        .help(L10n.Diff.recentFilterHelp)
+                }
                 Toggle(L10n.Diff.hideLargeFiles, isOn: $hideLargeFiles)
                     .toggleStyle(.button)
                     .help(L10n.Diff.hideLargeFilesHelp)
@@ -136,7 +139,9 @@ private struct DiffFileListView: View {
                     }
                 }
             )) {
-                if let comparisonBranch = store.comparisonBranch {
+                if let baseBranch = store.comparisonBaseBranch, let targetBranch = store.comparisonTargetBranch {
+                    section(title: L10n.format(L10n.Diff.comparedBranches, targetBranch, baseBranch), entries: visibleEntries)
+                } else if let comparisonBranch = store.comparisonBranch {
                     section(title: L10n.format(L10n.Diff.comparedWithBranch, comparisonBranch), entries: visibleEntries)
                 } else {
                     section(title: String(localized: DiffChangeGroup.staged.label), entries: visibleStaged)
@@ -153,12 +158,23 @@ private struct DiffFileListView: View {
                 }
             }
         }
+        .sheet(isPresented: $showsBranchComparison) {
+            BranchComparisonPickerView(store: store)
+        }
+    }
+
+    private var comparisonLabel: String {
+        if let baseBranch = store.comparisonBaseBranch, let targetBranch = store.comparisonTargetBranch {
+            return L10n.format(L10n.Diff.branchComparisonLabel, baseBranch, targetBranch)
+        }
+        return store.comparisonBranch ?? String(localized: L10n.Diff.localChanges)
     }
 
     private var emptyListMessage: String {
         if store.isRefreshing { return String(localized: L10n.Diff.loading) }
         if store.displayedEntries.isEmpty {
-            return String(localized: store.comparisonBranch == nil ? L10n.Diff.noChanges : L10n.Diff.noBranchDifferences)
+            let isComparison = store.comparisonBranch != nil || store.isComparingBranches
+            return String(localized: isComparison ? L10n.Diff.noBranchDifferences : L10n.Diff.noChanges)
         }
         return String(localized: L10n.Diff.noFilesMatchFilter)
     }
@@ -177,6 +193,102 @@ private struct DiffFileListView: View {
                 }
             }
         }
+    }
+}
+
+private struct DiffBranchPickerPopover: View {
+    @ObservedObject var store: RepoDiffStore
+    let onCompareBranches: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+
+    private var filteredBranches: [String] {
+        guard !searchText.isEmpty else { return store.availableComparisonBranches }
+        return store.availableComparisonBranches.filter { $0.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField(L10n.Common.searchBranches, text: $searchText)
+                    .textFieldStyle(.plain)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.Common.clearSearch)
+                    .accessibilityLabel(L10n.Common.clearSearch)
+                }
+            }
+            .padding(10)
+
+            List {
+                Button {
+                    store.selectComparisonBranch(nil)
+                    dismiss()
+                } label: {
+                    HStack {
+                        Text(L10n.Diff.localChanges)
+                        Spacer()
+                        if store.comparisonBranch == nil && !store.isComparingBranches {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if !filteredBranches.isEmpty {
+                    Section {
+                        ForEach(filteredBranches, id: \.self) { branch in
+                            Button {
+                                store.selectComparisonBranch(branch)
+                                dismiss()
+                            } label: {
+                                HStack {
+                                    Text(branch)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 8)
+                                    if store.comparisonBranch == branch {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help(branch)
+                        }
+                    }
+                } else if !searchText.isEmpty {
+                    ContentUnavailableView(
+                        String(localized: L10n.Common.noMatchingBranches),
+                        systemImage: "magnifyingglass"
+                    )
+                }
+            }
+            .listStyle(.plain)
+
+            Divider()
+            Button {
+                dismiss()
+                onCompareBranches()
+            } label: {
+                Label(L10n.Diff.compareBranches, systemImage: "arrow.left.arrow.right")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(10)
+        }
+        .frame(width: 360, height: 420)
+        .onAppear { searchText = "" }
     }
 }
 
@@ -375,8 +487,10 @@ private struct DiffHunkView: View {
 
             switch mode {
             case .unified:
-                ForEach(hunk.lines) { line in
-                    UnifiedDiffLineView(line: line)
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(hunk.lines) { line in
+                        UnifiedDiffLineView(line: line)
+                    }
                 }
             case .split:
                 SplitDiffLinesView(lines: hunk.lines)
@@ -422,7 +536,7 @@ private struct SplitDiffLinesView: View {
 
     var body: some View {
         let rows = Self.pairRows(from: lines)
-        VStack(spacing: 0) {
+        LazyVStack(spacing: 0) {
             ForEach(rows.indices, id: \.self) { index in
                 SplitDiffRow(left: rows[index].0, right: rows[index].1)
             }

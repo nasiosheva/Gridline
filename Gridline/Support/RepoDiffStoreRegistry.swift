@@ -12,6 +12,7 @@ import Foundation
 @MainActor
 final class RepoDiffStoreRegistry: ObservableObject {
     private var stores: [UUID: RepoDiffStore] = [:]
+    private var visibleRepoIDs = Set<UUID>()
 
     func store(for repo: Repo) -> RepoDiffStore {
         if let existing = stores[repo.id] {
@@ -19,6 +20,15 @@ final class RepoDiffStoreRegistry: ObservableObject {
         }
         let store = RepoDiffStore(repoPath: repo.path)
         stores[repo.id] = store
+        store.setWatching(visibleRepoIDs.contains(repo.id))
         return store
+    }
+
+    func setVisibleRepoIDs(_ repoIDs: Set<UUID>) {
+        guard visibleRepoIDs != repoIDs else { return }
+        visibleRepoIDs = repoIDs
+        stores.forEach { repoID, store in
+            store.setWatching(repoIDs.contains(repoID))
+        }
     }
 }

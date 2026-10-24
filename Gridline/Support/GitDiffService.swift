@@ -10,33 +10,48 @@
 
 import Foundation
 
+struct GitDiffStatusSnapshot {
+    let entries: [DiffFileEntry]
+    let headerStatus: RepoHeaderStatus?
+}
+
 enum GitDiffService {
+    private static let maximumConcurrentUntrackedFileReads = 4
+    private static let untrackedReadChunkSize = 64 * 1024
+    private static let binaryDetectionPrefixLength = 8_000
+
     static func comparisonBranches(at path: String) async -> [String] {
-        async let branchesOutput = GitProcess.run(
+        let branches = await GitProcess.run(
             ["--no-optional-locks", "branch", "--format=%(refname:short)"],
             at: path
         )
-        async let currentOutput = GitProcess.run(
-            ["--no-optional-locks", "branch", "--show-current"],
-            at: path
-        )
-        let (branches, current) = await (branchesOutput, currentOutput)
         guard branches.exitCode == 0 else { return [] }
-        let currentBranch = current.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return branches.stdout
             .split(whereSeparator: \.isNewline)
             .map(String.init)
-            .filter { !$0.isEmpty && $0 != currentBranch }
+            .filter { !$0.isEmpty }
             .sorted()
     }
 
     static func comparisonEntries(at path: String, against branch: String) async -> [DiffFileEntry] {
+        await comparisonEntries(at: path, revisions: [branch], readWorkingTreeMetadata: true)
+    }
+
+    static func comparisonEntries(at path: String, from baseBranch: String, to targetBranch: String) async -> [DiffFileEntry] {
+        await comparisonEntries(
+            at: path,
+            revisions: ["\(baseBranch)...\(targetBranch)"],
+            readWorkingTreeMetadata: false
+        )
+    }
+
+    private static func comparisonEntries(at path: String, revisions: [String], readWorkingTreeMetadata: Bool) async -> [DiffFileEntry] {
         async let statusOutput = GitProcess.run(
-            ["--no-optional-locks", "diff", "--no-ext-diff", "--name-status", "-z", branch, "--"],
+            ["--no-optional-locks", "diff", "--no-ext-diff", "--name-status", "-z"] + revisions + ["--"],
             at: path
         )
         async let countsOutput = GitProcess.run(
-            ["--no-optional-locks", "diff", "--no-ext-diff", "--numstat", branch, "--"],
+            ["--no-optional-locks", "diff", "--no-ext-diff", "--numstat"] + revisions + ["--"],
             at: path
         )
         let (output, countsResult) = await (statusOutput, countsOutput)
@@ -76,10 +91,12 @@ enum GitDiffService {
                 entries[index].additions = lineCounts.additions
                 entries[index].deletions = lineCounts.deletions
             }
-            let filePath = (path as NSString).appendingPathComponent(entries[index].path)
-            if let attributes = try? FileManager.default.attributesOfItem(atPath: filePath) {
-                entries[index].fileSizeBytes = (attributes[.size] as? NSNumber)?.int64Value
-                entries[index].modificationDate = attributes[.modificationDate] as? Date
+            if readWorkingTreeMetadata {
+                let filePath = (path as NSString).appendingPathComponent(entries[index].path)
+                if let attributes = try? FileManager.default.attributesOfItem(atPath: filePath) {
+                    entries[index].fileSizeBytes = (attributes[.size] as? NSNumber)?.int64Value
+                    entries[index].modificationDate = attributes[.modificationDate] as? Date
+                }
             }
         }
         return entries
@@ -89,18 +106,24 @@ enum GitDiffService {
 
     /// Mengambil daftar file berubah, dikelompokkan staged/unstaged/untracked,
     /// lengkap dengan jumlah baris ditambah/dihapus.
-    static func statusEntries(at path: String) async -> [DiffFileEntry] {
-        let statusOutput = await GitProcess.run(["--no-optional-locks", "status", "--porcelain=v2"], at: path)
+    static func statusSnapshot(at path: String) async -> GitDiffStatusSnapshot {
+        let statusOutput = await GitProcess.run(
+            ["--no-optional-locks", "status", "--porcelain=v2", "--branch"],
+            at: path
+        )
         guard statusOutput.exitCode == 0 else {
             DiagnosticLog.shared.record(.gitStatusFailed(statusOutput.exitCode))
-            return []
+            return GitDiffStatusSnapshot(entries: [], headerStatus: nil)
         }
 
         var entries = parsePorcelainV2(statusOutput.stdout)
+        let headerStatus = GitService.headerStatus(from: statusOutput.stdout)
+        let untrackedFiles = entries.filter { $0.group == .untracked }.map(\.path)
 
         async let stagedCounts = numstat(at: path, cached: true)
         async let unstagedCounts = numstat(at: path, cached: false)
-        let (staged, unstaged) = await (stagedCounts, unstagedCounts)
+        async let untrackedCountsRequest = untrackedCounts(at: path, files: untrackedFiles)
+        let (staged, unstaged, untracked) = await (stagedCounts, unstagedCounts, untrackedCountsRequest)
 
         for index in entries.indices {
             switch entries[index].group {
@@ -115,7 +138,7 @@ enum GitDiffService {
                     entries[index].deletions = counts.deletions
                 }
             case .untracked:
-                if let counts = await untrackedCount(at: path, file: entries[index].path) {
+                if let counts = untracked[entries[index].path] {
                     entries[index].additions = counts.additions
                     entries[index].deletions = counts.deletions
                 }
@@ -128,7 +151,7 @@ enum GitDiffService {
             }
         }
 
-        return entries
+        return GitDiffStatusSnapshot(entries: entries, headerStatus: headerStatus)
     }
 
     private static func parsePorcelainV2(_ output: String) -> [DiffFileEntry] {
@@ -207,9 +230,40 @@ enum GitDiffService {
 
     // MARK: - Jumlah baris (numstat)
 
-    private struct LineCounts {
+    private struct LineCounts: Sendable {
         let additions: Int?
         let deletions: Int?
+    }
+
+    private static func untrackedCounts(at path: String, files: [String]) async -> [String: LineCounts] {
+        guard !files.isEmpty else { return [:] }
+
+        return await withTaskGroup(of: (String, LineCounts?).self) { group in
+            var result: [String: LineCounts] = [:]
+            var nextFileIndex = 0
+
+            for _ in 0..<min(maximumConcurrentUntrackedFileReads, files.count) {
+                let file = files[nextFileIndex]
+                nextFileIndex += 1
+                group.addTask {
+                    (file, untrackedCount(at: path, file: file))
+                }
+            }
+
+            while let (file, counts) = await group.next() {
+                if let counts {
+                    result[file] = counts
+                }
+                guard nextFileIndex < files.count else { continue }
+                let nextFile = files[nextFileIndex]
+                nextFileIndex += 1
+                group.addTask {
+                    (nextFile, untrackedCount(at: path, file: nextFile))
+                }
+            }
+
+            return result
+        }
     }
 
     private static func numstat(at path: String, cached: Bool) async -> [String: LineCounts] {
@@ -254,12 +308,55 @@ enum GitDiffService {
         return raw
     }
 
-    private static func untrackedCount(at path: String, file: String) async -> LineCounts? {
-        let output = await GitProcess.run(["--no-optional-locks", "diff", "--no-index", "--numstat", "--", "/dev/null", file], at: path)
-        // `git diff --no-index` keluar dengan status 1 saat berbeda — itu normal, bukan error.
-        guard output.exitCode == 0 || output.exitCode == 1 else { return nil }
-        let parsed = parseNumstat(output.stdout)
-        return parsed.values.first
+    private static func untrackedCount(at path: String, file: String) -> LineCounts? {
+        let fileURL = URL(fileURLWithPath: (path as NSString).appendingPathComponent(file))
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let fileType = attributes[.type] as? FileAttributeType else { return nil }
+
+        if fileType == .typeSymbolicLink {
+            guard let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: fileURL.path) else { return nil }
+            let bytes = Array(destination.utf8)
+            var lineCount = 0
+            for byte in bytes where byte == 0x0A {
+                lineCount += 1
+            }
+            if !bytes.isEmpty, bytes.last != 0x0A {
+                lineCount += 1
+            }
+            return LineCounts(additions: lineCount, deletions: 0)
+        }
+
+        guard fileType == .typeRegular else { return nil }
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        defer { try? handle.close() }
+
+        var lineCount = 0
+        var inspectedPrefixLength = 0
+        var lastByte: UInt8?
+
+        do {
+            while let chunk = try handle.read(upToCount: untrackedReadChunkSize), !chunk.isEmpty {
+                for byte in chunk {
+                    if inspectedPrefixLength < binaryDetectionPrefixLength {
+                        if byte == 0 {
+                            return LineCounts(additions: nil, deletions: nil)
+                        }
+                        inspectedPrefixLength += 1
+                    }
+                    if byte == 0x0A {
+                        lineCount += 1
+                    }
+                }
+                lastByte = chunk.last
+            }
+        } catch {
+            return nil
+        }
+
+        if let lastByte, lastByte != 0x0A {
+            lineCount += 1
+        }
+        return LineCounts(additions: lineCount, deletions: 0)
     }
 
     // MARK: - Isi diff per file
@@ -287,6 +384,18 @@ enum GitDiffService {
             ["--no-optional-locks", "diff", "--no-ext-diff", branch, "--", entry.path],
             at: repoPath
         )
+        return fileDiff(output: output, entry: entry)
+    }
+
+    static func fileDiff(at repoPath: String, from baseBranch: String, to targetBranch: String, for entry: DiffFileEntry) async -> FileDiff {
+        let output = await GitProcess.run(
+            ["--no-optional-locks", "diff", "--no-ext-diff", "\(baseBranch)...\(targetBranch)", "--", entry.path],
+            at: repoPath
+        )
+        return fileDiff(output: output, entry: entry)
+    }
+
+    private static func fileDiff(output: GitProcess.Output, entry: DiffFileEntry) -> FileDiff {
         if output.stdout.contains("Binary files") {
             return FileDiff(entry: entry, hunks: [], isBinary: true, rawText: output.stdout)
         }

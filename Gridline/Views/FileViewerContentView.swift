@@ -51,7 +51,12 @@ struct FileViewerContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         case .text(let text):
-            ReadOnlyTextView(text: text, scrollToLine: tab.pendingScrollLine) {
+            ReadOnlyTextView(
+                text: text,
+                lineStartOffsets: tab.lineStartOffsets,
+                contentVersion: tab.loadedFile?.id ?? tab.id,
+                scrollToLine: tab.pendingScrollLine
+            ) {
                 tab.pendingScrollLine = nil
             }
 

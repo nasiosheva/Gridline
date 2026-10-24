@@ -9,7 +9,7 @@ import SwiftUI
 
 struct RepoPaneHeaderView: View {
     let repo: Repo
-    let status: RepoHeaderStatus?
+    @ObservedObject var diffStore: RepoDiffStore
     let attention: RepoAttentionStatus?
     let workStatus: RepoWorkStatus
     let isMaximized: Bool
@@ -19,8 +19,10 @@ struct RepoPaneHeaderView: View {
     var onClosePane: () -> Void
     var onToggleMaximize: () -> Void
     var onToggleTerminalOnly: () -> Void
+    @State private var showsWorktreePicker = false
 
     var body: some View {
+        let status = diffStore.headerStatus
         HStack(spacing: 8) {
             Circle()
                 .fill(RepoIdentityColor.color(for: repo))
@@ -35,6 +37,17 @@ struct RepoPaneHeaderView: View {
                 .font(.caption)
                 .foregroundStyle(workStatus == .needsAttention ? .red : .secondary)
                 .help(L10n.Repository.workStatusHelp)
+
+            if !diffStore.hasLoadedInitialStatus || diffStore.isRefreshing {
+                HStack(spacing: 5) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(L10n.Worktree.openingBranch)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+            }
 
             if let status {
                 branchLabel(status)
@@ -71,6 +84,12 @@ struct RepoPaneHeaderView: View {
                     )
                 }
 
+                Button {
+                    showsWorktreePicker = true
+                } label: {
+                    Label(L10n.Worktree.openBranchInNewPane, systemImage: "arrow.triangle.branch")
+                }
+
                 Divider()
 
                 Button(role: .destructive, action: onClose) {
@@ -81,6 +100,9 @@ struct RepoPaneHeaderView: View {
         .padding(.horizontal, 10)
         .frame(height: 32)
         .background(.bar)
+        .sheet(isPresented: $showsWorktreePicker) {
+            WorktreeBranchPickerView(repo: repo)
+        }
     }
 
     @ViewBuilder

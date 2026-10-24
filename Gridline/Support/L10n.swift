@@ -11,6 +11,10 @@ enum L10n {
         static let ok: LocalizedStringResource = "common.ok"
         static let cancel: LocalizedStringResource = "common.cancel"
         static let close: LocalizedStringResource = "common.close"
+        static let clearSearch: LocalizedStringResource = "common.clear_search"
+        static let done: LocalizedStringResource = "common.done"
+        static let searchBranches: LocalizedStringResource = "common.search_branches"
+        static let noMatchingBranches: LocalizedStringResource = "common.no_matching_branches"
         static let openRepository: LocalizedStringResource = "common.open_repository"
         static let copyPath: LocalizedStringResource = "common.copy_path"
         static let copyDiff: LocalizedStringResource = "common.copy_diff"
@@ -57,6 +61,7 @@ enum L10n {
         static let behind: LocalizedStringResource = "repository.behind"
         static let gitUnavailable: LocalizedStringResource = "repository.git_unavailable"
         static let chooseFolderAgain: LocalizedStringResource = "repository.choose_folder_again"
+        static let worktreeDisplayName: LocalizedStringResource = "repository.worktree_display_name"
     }
 
     enum Pane {
@@ -85,6 +90,7 @@ enum L10n {
         static let closeTab: LocalizedStringResource = "terminal.close_tab"
         static let closeRunningTabTitle: LocalizedStringResource = "terminal.close_running_tab_title"
         static let closeRunningTabMessage: LocalizedStringResource = "terminal.close_running_tab_message"
+        static let openTabs: LocalizedStringResource = "terminal.open_tabs"
         static let finishedNotification: LocalizedStringResource = "terminal.finished_notification"
         static let failedNotification: LocalizedStringResource = "terminal.failed_notification"
     }
@@ -112,10 +118,18 @@ enum L10n {
     enum Diff {
         static let localChanges: LocalizedStringResource = "diff.local_changes"
         static let compareBranchHelp: LocalizedStringResource = "diff.compare_branch_help"
+        static let compareBranches: LocalizedStringResource = "diff.compare_branches"
+        static let branchComparisonExplanation: LocalizedStringResource = "diff.branch_comparison_explanation"
+        static let branchComparisonLabel: LocalizedStringResource = "diff.branch_comparison_label"
+        static let baseBranch: LocalizedStringResource = "diff.base_branch"
+        static let targetBranch: LocalizedStringResource = "diff.target_branch"
+        static let applyBranchComparison: LocalizedStringResource = "diff.apply_branch_comparison"
+        static let notEnoughBranches: LocalizedStringResource = "diff.not_enough_branches"
         static let recentFilterHelp: LocalizedStringResource = "diff.recent_filter_help"
         static let hideLargeFiles: LocalizedStringResource = "diff.hide_large_files"
         static let hideLargeFilesHelp: LocalizedStringResource = "diff.hide_large_files_help"
         static let comparedWithBranch: LocalizedStringResource = "diff.compared_with_branch"
+        static let comparedBranches: LocalizedStringResource = "diff.compared_branches"
         static let loading: LocalizedStringResource = "diff.loading"
         static let noChanges: LocalizedStringResource = "diff.no_changes"
         static let noBranchDifferences: LocalizedStringResource = "diff.no_branch_differences"
@@ -138,8 +152,25 @@ enum L10n {
         static let copyCommand: LocalizedStringResource = "diff.copy_command"
     }
 
+    enum Worktree {
+        static let openBranchInNewPane: LocalizedStringResource = "worktree.open_branch_in_new_pane"
+        static let title: LocalizedStringResource = "worktree.title"
+        static let alertTitle: LocalizedStringResource = "worktree.alert_title"
+        static let loadingBranches: LocalizedStringResource = "worktree.loading_branches"
+        static let openingBranch: LocalizedStringResource = "worktree.opening_branch"
+        static let noOtherBranches: LocalizedStringResource = "worktree.no_other_branches"
+        static let loadFailed: LocalizedStringResource = "worktree.load_failed"
+        static let operationFailed: LocalizedStringResource = "worktree.operation_failed"
+        static let paneLimitReached: LocalizedStringResource = "worktree.pane_limit_reached"
+        static let pathAlreadyExists: LocalizedStringResource = "worktree.path_already_exists"
+        static let chooseBranchAgain: LocalizedStringResource = "worktree.choose_branch_again"
+    }
+
     enum TopArea {
         static let diffTab: LocalizedStringResource = "top_area.diff_tab"
+        static let openTabs: LocalizedStringResource = "top_area.open_tabs"
+        static let searchOpenTabs: LocalizedStringResource = "top_area.search_open_tabs"
+        static let closeOtherTabs: LocalizedStringResource = "top_area.close_other_tabs"
         static let showViewerAsTab: LocalizedStringResource = "top_area.show_viewer_as_tab"
         static let showViewerBesideDiff: LocalizedStringResource = "top_area.show_viewer_beside_diff"
     }

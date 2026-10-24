@@ -55,7 +55,14 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            updateStoreVisibility()
             clearAttention(for: layout.activePaneID)
+        }
+        .onChange(of: paneRepoIDs) { _, _ in
+            updateStoreVisibility()
+        }
+        .onChange(of: topAreaRepoIDs) { _, _ in
+            updateStoreVisibility()
         }
         .onChange(of: appState.state.paneLayout.activePaneID) { _, paneID in
             clearAttention(for: paneID)
@@ -98,6 +105,9 @@ struct ContentView: View {
                 )
             case .shortcutHelp:
                 ShortcutHelpView()
+            case .worktreePicker(let repo, let paneID):
+                WorktreeBranchPickerView(repo: repo, replacingPaneID: paneID)
+                    .environmentObject(appState)
             }
         }
         .confirmationDialog(
@@ -160,6 +170,24 @@ struct ContentView: View {
 
     private var layout: PaneLayout {
         appState.state.paneLayout
+    }
+
+    private var visiblePaneSlots: [PaneSlot] {
+        guard let maximizedPaneID = layout.maximizedPaneID else { return layout.slots }
+        return layout.slots.filter { $0.id == maximizedPaneID }
+    }
+
+    private var paneRepoIDs: Set<UUID> {
+        Set(visiblePaneSlots.compactMap(\.repoID))
+    }
+
+    private var topAreaRepoIDs: Set<UUID> {
+        Set(visiblePaneSlots.filter { $0.id != layout.terminalOnlyPaneID }.compactMap(\.repoID))
+    }
+
+    private func updateStoreVisibility() {
+        diffStoreRegistry.setVisibleRepoIDs(paneRepoIDs)
+        topAreaStoreRegistry.setVisibleRepoIDs(topAreaRepoIDs)
     }
 
     private var activePreset: PaneLayoutPreset? {
@@ -341,14 +369,35 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
-            Button(L10n.Repository.chooseFolderAgain) {
-                appState.focusPane(id: paneID)
-                openRepo()
+            if let sourceRepo = worktreeSourceRepo(for: repo) {
+                Button(L10n.Worktree.chooseBranchAgain) {
+                    appState.focusPane(id: paneID)
+                    activeSheet = .worktreePicker(repo: sourceRepo, paneID: paneID)
+                }
+            } else {
+                Button(L10n.Repository.chooseFolderAgain) {
+                    appState.focusPane(id: paneID)
+                    openRepo()
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(20)
         .background(.background)
+    }
+
+    private func worktreeSourceRepo(for missingRepo: Repo) -> Repo? {
+        let candidates = appState.state.savedRepos.filter { $0.id != missingRepo.id && $0.existsOnDisk }
+        if let sourceID = missingRepo.worktreeSourceRepoID {
+            return candidates.first(where: { $0.id == sourceID })
+        }
+        if let displayName = missingRepo.displayName,
+           let separator = displayName.range(of: " — ") {
+            let sourceName = String(displayName[..<separator.lowerBound])
+            let matchingRepos = candidates.filter { $0.name == sourceName }
+            if matchingRepos.count == 1 { return matchingRepos.first }
+        }
+        return candidates.count == 1 ? candidates.first : nil
     }
 
     private func paneActionsMenu(paneID: UUID) -> some View {
@@ -482,11 +531,21 @@ private struct ClearTerminalShortcutModifier: ViewModifier {
     }
 }
 
-private enum ContentSheet: String, Identifiable {
+private enum ContentSheet: Identifiable {
     case quickSwitcher
     case shortcutHelp
+    case worktreePicker(repo: Repo, paneID: UUID)
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case .quickSwitcher:
+            return "quickSwitcher"
+        case .shortcutHelp:
+            return "shortcutHelp"
+        case .worktreePicker(let repo, let paneID):
+            return "worktreePicker-\(repo.id.uuidString)-\(paneID.uuidString)"
+        }
+    }
 }
 
 private struct PendingRepoClose: Identifiable {

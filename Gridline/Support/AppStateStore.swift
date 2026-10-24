@@ -116,6 +116,11 @@ final class AppStateStore: ObservableObject {
         }
     }
 
+    var canAddRepositoryToPane: Bool {
+        state.paneLayout.slots.count < PaneLayout.maximumPaneCount
+            || state.paneLayout.slots.contains(where: { $0.repoID == nil })
+    }
+
     func clearRecentRepositories() {
         guard !state.recentRepoIDs.isEmpty else { return }
         state.recentRepoIDs.removeAll()
@@ -142,6 +147,65 @@ final class AppStateStore: ObservableObject {
         state.paneLayout.assign(repoID: repo.id)
         persist()
         return repo
+    }
+
+    @discardableResult
+    func openRepoInNewPane(
+        path: String,
+        displayName: String,
+        sourceRepoID: UUID? = nil,
+        branch: String? = nil,
+        replacingPaneID: UUID? = nil
+    ) -> Bool {
+        let normalizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        guard replacingPaneID == nil || state.paneLayout.slots.contains(where: { $0.id == replacingPaneID }) else {
+            return false
+        }
+        if let existingIndex = state.savedRepos.firstIndex(where: {
+            URL(fileURLWithPath: $0.path).standardizedFileURL.path == normalizedPath
+        }) {
+            let repoID = state.savedRepos[existingIndex].id
+            let existingPane = state.paneLayout.slots.first(where: { $0.repoID == repoID })
+            guard existingPane != nil || replacingPaneID != nil || canAddRepositoryToPane else { return false }
+            state.savedRepos[existingIndex].displayName = displayName
+            state.savedRepos[existingIndex].worktreeSourceRepoID = sourceRepoID
+            state.savedRepos[existingIndex].worktreeBranch = branch
+            if let existingPane {
+                state.paneLayout.activePaneID = existingPane.id
+                markRepoRecent(repoID)
+                persist()
+                return true
+            }
+            markRepoRecent(repoID)
+            if let replacingPaneID,
+               let paneIndex = state.paneLayout.slots.firstIndex(where: { $0.id == replacingPaneID }) {
+                state.paneLayout.slots[paneIndex].repoID = repoID
+                state.paneLayout.activePaneID = replacingPaneID
+            } else {
+                state.paneLayout.assign(repoID: repoID)
+            }
+            persist()
+            return true
+        }
+
+        guard replacingPaneID != nil || canAddRepositoryToPane else { return false }
+        let repo = Repo(
+            path: normalizedPath,
+            displayName: displayName,
+            worktreeSourceRepoID: sourceRepoID,
+            worktreeBranch: branch
+        )
+        state.savedRepos.append(repo)
+        markRepoRecent(repo.id)
+        if let replacingPaneID,
+           let paneIndex = state.paneLayout.slots.firstIndex(where: { $0.id == replacingPaneID }) {
+            state.paneLayout.slots[paneIndex].repoID = repo.id
+            state.paneLayout.activePaneID = replacingPaneID
+        } else {
+            state.paneLayout.assign(repoID: repo.id)
+        }
+        persist()
+        return true
     }
 
     func removeRepo(id: UUID) {

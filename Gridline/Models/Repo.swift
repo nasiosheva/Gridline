@@ -13,10 +13,22 @@ import Foundation
 struct Repo: Identifiable, Codable, Hashable {
     let id: UUID
     var path: String
+    var displayName: String?
+    var worktreeSourceRepoID: UUID?
+    var worktreeBranch: String?
 
-    init(id: UUID = UUID(), path: String) {
+    init(
+        id: UUID = UUID(),
+        path: String,
+        displayName: String? = nil,
+        worktreeSourceRepoID: UUID? = nil,
+        worktreeBranch: String? = nil
+    ) {
         self.id = id
         self.path = path
+        self.displayName = displayName
+        self.worktreeSourceRepoID = worktreeSourceRepoID
+        self.worktreeBranch = worktreeBranch
     }
 
     var url: URL {
@@ -24,7 +36,7 @@ struct Repo: Identifiable, Codable, Hashable {
     }
 
     var name: String {
-        url.lastPathComponent
+        displayName ?? url.lastPathComponent
     }
 
     /// Repo dianggap valid jika foldernya ada dan punya `.git` (folder biasa atau file,

@@ -26,13 +26,17 @@ struct TerminalAreaView: View {
 
     private var tabBar: some View {
         HStack(spacing: 2) {
-            ForEach(session.tabs) { tab in
-                TerminalTabChip(
-                    tab: tab,
-                    isActive: tab.id == session.activeTabID,
-                    onSelect: { session.activeTabID = tab.id },
-                    onClose: { session.closeTab(id: tab.id) }
-                )
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 2) {
+                    ForEach(session.tabs) { tabChip(for: $0) }
+                }
+
+                HStack(spacing: 2) {
+                    if let activeTab = session.tabs.first(where: { $0.id == session.activeTabID }) {
+                        tabChip(for: activeTab)
+                    }
+                    tabOverflowMenu
+                }
             }
 
             Button {
@@ -48,6 +52,38 @@ struct TerminalAreaView: View {
         }
         .padding(.horizontal, 4)
         .frame(height: 28)
+    }
+
+    private var tabOverflowMenu: some View {
+        Menu {
+            ForEach(session.tabs) { tab in
+                Button {
+                    session.activeTabID = tab.id
+                } label: {
+                    if tab.id == session.activeTabID {
+                        Label(tab.title, systemImage: "checkmark")
+                    } else {
+                        Text(tab.title)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .help(L10n.Terminal.openTabs)
+        .accessibilityLabel(L10n.Terminal.openTabs)
+    }
+
+    private func tabChip(for tab: TerminalTab) -> some View {
+        TerminalTabChip(
+            tab: tab,
+            isActive: tab.id == session.activeTabID,
+            onSelect: { session.activeTabID = tab.id },
+            onClose: { session.closeTab(id: tab.id) }
+        )
     }
 }
 

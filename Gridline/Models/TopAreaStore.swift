@@ -19,6 +19,7 @@ enum TopTabSelection: Hashable {
 final class TopAreaStore: ObservableObject {
     @Published private(set) var openFiles: [FileViewerTab] = []
     @Published var selection: TopTabSelection = .diff
+    private var isWatchingFiles = false
 
     /// Membuka file di viewer. Jika sudah terbuka, tab yang ada dipilih —
     /// tidak dibuat duplikat (bagian 7 & 9 apps-spec.md).
@@ -31,10 +32,16 @@ final class TopAreaStore: ObservableObject {
             }
             return existing
         }
-        let tab = FileViewerTab(path: path, scrollToLine: scrollToLine)
+        let tab = FileViewerTab(path: path, scrollToLine: scrollToLine, isWatching: isWatchingFiles)
         openFiles.append(tab)
         selection = .file(tab.id)
         return tab
+    }
+
+    func setWatching(_ shouldWatch: Bool) {
+        guard isWatchingFiles != shouldWatch else { return }
+        isWatchingFiles = shouldWatch
+        openFiles.forEach { $0.setWatching(shouldWatch) }
     }
 
     func closeFile(id: UUID) {
@@ -42,5 +49,11 @@ final class TopAreaStore: ObservableObject {
         if case .file(let selectedID) = selection, selectedID == id {
             selection = .diff
         }
+    }
+
+    func closeOtherFiles(keeping id: UUID) {
+        guard openFiles.contains(where: { $0.id == id }) else { return }
+        openFiles.removeAll { $0.id != id }
+        selection = .file(id)
     }
 }
