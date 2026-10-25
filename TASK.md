@@ -215,3 +215,17 @@ Pembaruan navigasi diff 2026-10-25: area diff mengambil keyboard focus saat dikl
 Penyempurnaan UI diff 2026-10-25: fokus keyboard ditandai garis aksen pada daftar file, file terpilih diberi aksen berbeda dari hover, dan petunjuk ↑↓/⌥↑↓ ditampilkan saat area diff aktif. Copy Indonesia dan English ditambahkan ke katalog lokalisasi. Build/test belum dijalankan.
 
 Verifikasi pengiriman 2026-10-25: parser Swift untuk file yang berubah, JSON lokalisasi, dan `git diff --check` berhasil. Build Debug dicoba tetapi berhenti sebelum kompilasi karena DNS GitHub tidak tersedia dan cache manifest SwiftPM di luar workspace ditolak sandbox. Uji GUI masih pending.
+
+Permintaan tambahan 2026-10-25: tombol perbesar/perkecil teks ditambahkan pada bar tab terminal. Ukuran 9–24 pt berlaku langsung untuk semua tab tanpa memulai ulang shell dan tersimpan di preferensi aplikasi; tooltip dan aksesibilitas memakai lokalisasi Indonesia/English. Verifikasi build GUI masih pending.
+
+Permintaan tambahan 2026-10-25: menu ukuran teks diff ditambahkan terpisah dari terminal. Daftar file, header hunk, baris kode, dan gutter nomor baris ikut skala 9–20 pt; tersedia reset dan preferensi tersimpan. Viewer file tidak berubah. Verifikasi build GUI masih pending.
+
+Permintaan tambahan 2026-10-25: isi diff sekarang digulir horizontal dan vertikal; baris kode tidak membungkus saat font diperbesar. Mode split memakai lebar kolom bersama untuk semua baris file aktif agar pemisah tetap sejajar. Verifikasi build GUI masih pending.
+
+Uji GUI terminal 2026-10-25: build Debug terbaru dibuka dengan empat pane. Tab uji sementara menghasilkan 10.000 baris `seq` dan 2.000 baris output bertahap; scrollbar bisa berpindah ke tengah riwayat dan input gulir kecil mengubah posisi secara konsisten. Saat output bertahap dan posisi riwayat ditahan, dua tangkapan layar menunjukkan area terminal kosong meski scrollbar tetap di posisi yang sama; teks tampil lagi setelah scrollbar digerakkan. Kelancaran frame dan penggunaan CPU belum diukur, sehingga terminal belum bisa dinyatakan sepenuhnya smooth. Tab uji ditutup dan tampilan empat pane dipulihkan.
+
+Uji khusus scrollback terminal 2026-10-25: build Debug Xcode berhasil. Uji output bertahap sambil viewport ditahan di tengah riwayat tetap mereproduksi area terminal kosong pada beberapa tangkapan layar; menggerakkan scrollbar menggambar teks kembali. Pengaman invalidasi penuh dan `displayIfNeeded()` yang dikoaleskan tidak menghilangkan gejala, jadi perubahan itu dibuang. Tab uji ditutup dan hanya satu shell idle yang tersisa. Temuan render masih terbuka untuk penelusuran SwiftTerm/runtime lebih lanjut.
+
+Uji scrollback lanjutan: redraw yang dijadwalkan setelah callback scroll dan renderer Metal juga tidak mencegah area kosong saat stream berlanjut. Kedua percobaan dibuang; build Xcode berhasil dengan percobaan callback sebelum dibuang. Reproduksi terkontrol dengan 180 baris bertahap masih terjadi dan pulih setelah Page Up. Dua tab uji ditutup, tersisa satu shell idle. Fix render belum terkonfirmasi.
+
+Percobaan `terminal.updateFullScreen()` setelah scrollback juga tidak mengatasi layar kosong. Patch dibuang setelah reproduksi ulang; build Xcode berhasil saat percobaan dipasang. Kode terminal tetap pada baseline dan tab uji ditutup.

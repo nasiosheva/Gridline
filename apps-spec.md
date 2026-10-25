@@ -177,6 +177,8 @@ Diff berada di area atas setiap pane sebagai tab yang tidak bisa ditutup.
 - Baris ditambah berwarna hijau, baris dihapus berwarna merah.
 - Nomor baris ditampilkan di kedua sisi (lama dan baru).
 - Mode yang bisa dipilih: **split** (dua kolom) atau **unified** (satu kolom). Default mengikuti pengaturan.
+- Menu ukuran teks pada toolbar diff memperbesar atau memperkecil daftar file dan isi diff 1 pt per langkah (9–20 pt untuk kode), serta menyediakan reset. Ukuran berlaku di seluruh pane, tersimpan antarsesi, dan terpisah dari ukuran teks terminal maupun viewer file.
+- Baris kode diff tetap satu baris pada ukuran teks besar; isi diff bisa digulir horizontal dan vertikal. Lebar kolom split diseragamkan untuk seluruh baris file yang sedang dibuka supaya pasangan baris dan pemisah kolom tetap sejajar.
 - Di pane kecil, mode unified dipakai secara otomatis jika lebar area atas kurang dari batas minimum split.
 
 **Navigasi**
@@ -234,6 +236,7 @@ Terminal berada di area bawah setiap pane.
 
 **Bar tab**
 - Tombol **+** untuk tab baru.
+- Tombol **A−/A+** memperkecil atau memperbesar teks terminal 1 pt per klik (9–24 pt). Ukuran berlaku untuk semua tab terminal, termasuk tab pada pane tersembunyi, dan disimpan antarsesi aplikasi.
 - Tombol **×** di setiap tab untuk menutup.
 - Area terminal selalu punya minimal satu tab. Jika tab terakhir ditutup, shell baru otomatis dibuka di folder repo.
 - Tombol **+** membuka tab baru dengan shell baru di folder repo, dan langsung difokuskan.

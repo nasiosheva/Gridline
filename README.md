@@ -20,6 +20,9 @@ Gridline is a native macOS workspace for reviewing and working across several Gi
 - Close repositories from every pane in sequence; each pane with active terminal commands gets its own stop-or-keep confirmation.
 - Open files in a read-only viewer, including paths selected from terminal output with Command-click.
 - Run independent shell sessions in terminal tabs. ANSI 16/256-color and truecolor output are supported.
+- Resize terminal text with the smaller/larger buttons in any terminal tab bar. The size applies to all open tabs and is remembered between launches.
+- Resize diff text separately from the diff toolbar menu; file names, hunk headers, code lines, and line numbers scale together. The size is remembered between launches.
+- Scroll long diff lines horizontally in split or unified mode while keeping each line unwrapped and split columns aligned.
 - Switch between repositories and open files with the quick switcher.
 - Use the macOS Repository and Pane menus to switch repositories, choose a single-pane view, manage saved repositories, and change the grid layout without taking space from the workspace.
 - Keep repository layout and recent repository shortcuts between launches.

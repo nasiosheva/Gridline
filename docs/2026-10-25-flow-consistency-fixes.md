@@ -41,3 +41,31 @@ Build dan test tidak dijalankan sesuai instruksi.
 - Pemeriksaan source mengonfirmasi pemulihan worktree meneruskan `replacingPaneID` dan service dapat mengembalikan worktree yang sudah ada.
 - `swiftc -frontend -parse` pada file Swift yang berubah, validasi JSON katalog lokalisasi, dan `git diff --check` berhasil.
 - Build Debug dicoba, tetapi terhenti saat resolusi paket sebelum kompilasi: akses DNS GitHub tidak tersedia dan cache manifest SwiftPM di luar workspace tidak dapat ditulis dari sandbox. Uji GUI belum dijalankan.
+
+## Ukuran teks terminal
+
+Bar tab terminal menyediakan tombol kecil untuk memperkecil dan memperbesar teks 1 pt per klik, dengan batas 9–24 pt. Ukuran disimpan di preferensi aplikasi dan langsung diterapkan ke seluruh tab terminal yang terbuka tanpa membuat ulang shell, termasuk tab pada pane yang sedang tersembunyi. Tab baru memakai ukuran terakhir. Label aksesibilitas dan tooltip tersedia dalam bahasa Indonesia dan English.
+
+## Ukuran teks diff
+
+Toolbar diff menyediakan menu untuk memperbesar, memperkecil, dan mengatur ulang ukuran teks. Preferensi ini terpisah dari terminal, berlaku untuk daftar file dan isi diff di semua pane, dan tersimpan antarsesi. Gutter nomor baris ikut melebar sesuai font agar nomor tetap terbaca. Viewer file tidak ikut berubah. Copy menu tersedia dalam bahasa Indonesia dan English.
+
+Pemeriksaan sintaks Swift, pemeriksaan tipe preferensi, validasi JSON dan kunci lokalisasi, serta `git diff --check` berhasil. Build Xcode berhenti saat resolusi paket karena sandbox menolak cache SwiftPM/Clang di direktori pengguna; pemeriksaan tipe seluruh proyek lewat `swiftc` juga terhalang server macro SwiftUI dalam sandbox. Tampilan aplikasi belum diuji langsung.
+
+## Gulir horizontal diff
+
+Isi diff kini dapat digulir horizontal dan vertikal. Baris kode serta header hunk tetap satu baris pada semua ukuran font diff. Lebar konten dihitung dari file diff aktif; mode split menggunakan lebar kolom yang sama untuk seluruh pasangan baris agar pemisah kolom tidak bergeser. Daftar file, pemilihan file, navigasi hunk, dan sesi terminal tidak diubah.
+
+Lebar baris terpanjang disimpan sementara selama isi diff tidak berubah, sehingga perpindahan hunk dan resize pane tidak memindai ulang seluruh baris. Pemeriksaan parser Swift dan `git diff --check` berhasil; verifikasi build serta tampilan Xcode masih pending karena batasan sandbox yang sudah dicatat di atas.
+
+## Uji GUI gulir terminal
+
+Build Debug yang lebih baru daripada perubahan source dibuka dengan empat pane. Pada tab sementara, `seq` menghasilkan 10.000 baris dan Python menghasilkan 2.000 baris secara bertahap. Riwayat dapat digulir dan langkah gulir kecil mengubah posisi scrollbar secara konsisten. Ketika output bertahap berlangsung sambil riwayat ditahan, tangkapan layar sempat menunjukkan area terminal kosong sampai scrollbar digerakkan lagi. Belum ada pengukuran frame time atau CPU, sehingga status kelancaran gulir belum terkonfirmasi. Tab uji ditutup dan layout empat pane dikembalikan.
+
+## Uji ulang redraw terminal saat membaca scrollback
+
+Build Debug Xcode berhasil. Dengan output bertahap, viewport digeser ke tengah scrollback sementara output masih berjalan. Teks sempat terlihat, tetapi beberapa tangkapan layar berikutnya kembali menunjukkan area terminal kosong; menggeser scrollbar menggambar teks lagi. Baik invalidasi penuh maupun `displayIfNeeded()` yang dikoaleskan pada main queue tidak mencegah gejala. Pengaman tambahan di `GridlineTerminalView` dibuang karena tidak memperbaiki hasil dan berisiko menambah kerja render. Tab uji ditutup; satu shell idle tersisa. Akar masalah render belum terkonfirmasi.
+
+Uji lanjutan scrollback terminal: perubahan redraw yang dikoaleskan khusus setelah callback scroll juga tidak mencegah layar kosong saat output terus masuk, sehingga patch tersebut dibuang. Renderer Metal SwiftTerm dicoba sementara dan menunjukkan gejala kosong yang sama setelah interaksi scrollbar; renderer default tetap dipakai. Reproduksi terkontrol memakai 180 baris output bertahap: setelah scrollback terlihat, area terminal kembali kosong ketika stream berlanjut; menekan Page Up menggambar riwayat lagi. Kedua tab uji ditutup dan satu shell idle dipertahankan. Akar masalah masih terbuka.
+
+Percobaan tambahan `terminal.updateFullScreen()` pada callback scrollback juga tetap mereproduksi area kosong selama stream aktif. Patch ini dibuang. Xcode berhasil build dengan patch percobaan; kode terminal kembali ke baseline. Sesi uji dihentikan dan tab sementara ditutup.
