@@ -141,7 +141,7 @@ Sedang berjalan:
   - Panel diff dapat menampilkan perubahan working tree terhadap branch lokal lain, termasuk daftar file dan isi diff; mode perubahan lokal tetap tersedia.
   - Pilihan perbandingan branch per repo kini disimpan di state dan dipulihkan saat app dibuka lagi; branch yang telah dihapus mengembalikan panel ke Local Changes.
   - Saat jendela dibuka kembali tanpa menghentikan proses app, status Git dan daftar branch di-refresh walaupun repo yang terlihat tetap sama.
-  - Pemantau ringan pada Git `HEAD` mendeteksi checkout bersih di repo biasa dan worktree selama pane terlihat, tanpa memantau seluruh isi `.git`.
+  - Pemantau metadata Git membaca perubahan `HEAD`, index, dan ref branch aktif/perbandingan di repo biasa maupun worktree selama pane terlihat, tanpa memantau seluruh isi `.git`.
   - Semua subfitur checklist 20 sudah diimplementasikan. Checklist tetap pending sampai build dan smoke test GUI berhasil.
 - [ ] **21. Pengaturan (⌘,), diagnostik, ekspor log, dan Sparkle (jika dikonfirmasi).** *(implementasi dasar siap; verifikasi build/runtime pending)*
   - Settings ⌘, menyediakan batas scrollback 1.000, 5.000, 10.000, atau 25.000 baris. Perubahan langsung diterapkan ke tab aktif dan tab baru.
@@ -174,6 +174,14 @@ xcodebuild -project Gridline.xcodeproj -scheme Gridline -configuration Debug -sk
 `-skipPackagePluginValidation` wajib karena dependency SwiftTerm punya build plugin (`SwiftTermBuildInfoPlugin`) yang butuh persetujuan. Build pertama di mesin baru juga butuh Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`) untuk compile shader `.metal` milik SwiftTerm.
 
 **Setiap selesai satu tugas**: jalankan build di atas, pastikan `BUILD SUCCEEDED`, baru tandai `[x]` di sini dan di `apps-spec.md` bagian 16.
+
+## Test integrasi metadata Git (2026-10-25)
+
+- [x] Target `GridlineTests` dan scheme `Gridline` ditambahkan.
+- [x] Test mencakup refresh status setelah perubahan index saja, perubahan ref branch aktif tanpa perubahan file `HEAD`, perubahan ref branch perbandingan, dan pemuatan ulang diff terpilih saat jumlah baris tetap sama.
+- [x] Build dan jalankan suite lewat scheme `Gridline` di Xcode GUI pada 2026-10-25: 4 tes lulus, 0 gagal. Perintah CLI yang setara: `xcodebuild -project Gridline.xcodeproj -scheme Gridline -configuration Debug -destination 'platform=macOS' -skipPackagePluginValidation test`.
+- Probe Swift mandiri pada `GitMetadataWatcher` lolos untuk ketiga perubahan index/ref; ini tidak memverifikasi target XCTest atau pembaruan UI.
+- Verifikasi CLI sebelumnya terhenti sebelum kompilasi karena sandbox tidak mengizinkan SwiftPM menulis diagnostik manifest ke cache pengguna dan jaringan tidak dapat mengakses GitHub. Run Xcode GUI berhasil.
 
 
 ## Lokalisasi (permintaan tambahan 2026-10-24)

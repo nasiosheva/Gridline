@@ -420,6 +420,8 @@ Pemisahan ini penting: sesi terminal hidup di model repo, sehingga pane bisa dit
 - Unit test untuk logika grid pane dinamis (susunan jumlah pane, geometri fokus, dan migrasi posisi pembagi lama).
 - Test manual untuk terminal (vim, htop, resize) di setiap jumlah pane.
 - Pengujian integrasi dengan repo contoh yang berisi perubahan staged, unstaged, dan untracked.
+- Pengujian integrasi Git bahwa perubahan index saja dan ref branch saja memperbarui status atau perbandingan tanpa perubahan pada file kerja.
+- Pengujian bahwa isi diff terpilih dimuat ulang saat ref perbandingan berubah walaupun daftar file dan jumlah baris berubah tetap sama.
 - Pengujian worktree: dua worktree dari repo yang sama berdampingan, dengan diff dan sesi terminal masing-masing.
 - Pengujian konfirmasi ⌘Q: tombol default harus Batal, dan dialog menyebut jumlah proses yang berjalan.
 - Pengujian izin TCC: akses ke folder Desktop, Documents, dan Downloads ditolak, lalu petunjuk muncul dengan benar.
