@@ -88,6 +88,135 @@ final class GitMetadataRefreshTests: XCTestCase {
     }
 }
 
+@MainActor
+final class RepoDiffStoreTests: XCTestCase {
+    func testRefreshPartitionsStatusAndSelectsFilesWithinBounds() async throws {
+        let repository = try TemporaryGitRepository()
+        try Data("staged version\n".utf8).write(to: repository.url.appendingPathComponent("tracked.txt"))
+        try repository.git("add", "tracked.txt")
+        try Data("working version\n".utf8).write(to: repository.url.appendingPathComponent("tracked.txt"))
+        try Data("new file\n".utf8).write(to: repository.url.appendingPathComponent("new.txt"))
+
+        let store = RepoDiffStore(repoPath: repository.url.path)
+        await store.refresh()
+
+        XCTAssertEqual(store.staged.map(\.path), ["tracked.txt"])
+        XCTAssertEqual(store.unstaged.map(\.path), ["tracked.txt"])
+        XCTAssertEqual(store.untracked.map(\.path), ["new.txt"])
+        XCTAssertEqual(store.totalChangedFileCount, 2)
+        XCTAssertEqual(store.displayedEntries.count, 3)
+        XCTAssertNotNil(store.headerStatus)
+        XCTAssertNotNil(store.selectedDiff)
+
+        store.selectAdjacent(offset: -10)
+        XCTAssertEqual(store.selectedFileID, store.displayedEntries.first?.id)
+        store.selectAdjacent(offset: 10)
+        XCTAssertEqual(store.selectedFileID, store.displayedEntries.last?.id)
+        store.selectAdjacent(offset: 1)
+        XCTAssertEqual(store.selectedFileID, store.displayedEntries.last?.id)
+        store.selectAdjacent(offset: -1, within: [])
+        XCTAssertEqual(store.selectedFileID, store.displayedEntries.last?.id)
+    }
+
+    func testInitialComparisonBranchIsAppliedAndConsumedOnce() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("branch", "comparison")
+        try repository.advanceBranch("comparison", fileContents: "comparison version\n")
+        let store = RepoDiffStore(repoPath: repository.url.path, initialComparisonBranch: "comparison")
+        var consumedCount = 0
+        var selectionChanges: [DiffComparisonSelection] = []
+        store.onInitialComparisonBranchConsumed = { consumedCount += 1 }
+        store.onComparisonSelectionChanged = { selectionChanges.append($0) }
+
+        await store.refresh()
+
+        XCTAssertEqual(store.availableComparisonBranches, ["comparison", "main"])
+        XCTAssertEqual(store.comparisonBranch, "comparison")
+        XCTAssertEqual(store.displayedEntries, store.comparisonEntries)
+        XCTAssertEqual(consumedCount, 1)
+        XCTAssertEqual(selectionChanges.count, 1)
+        XCTAssertEqual(selectionChanges.first, .againstBranch("comparison"))
+        try await waitUntil { store.selectedDiff?.rawText.contains("comparison version") == true }
+
+        await store.refresh()
+        XCTAssertEqual(consumedCount, 1)
+    }
+
+    func testSavedSelectionWinsAndInvalidComparisonFallsBackToLocalChanges() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("branch", "comparison")
+        let saved = RepoDiffStore(
+            repoPath: repository.url.path,
+            initialComparisonBranch: "comparison",
+            savedComparisonSelection: .localChanges
+        )
+        var consumedSavedDefault = 0
+        saved.onInitialComparisonBranchConsumed = { consumedSavedDefault += 1 }
+        await saved.refresh()
+        XCTAssertNil(saved.comparisonBranch)
+        XCTAssertEqual(consumedSavedDefault, 1)
+
+        let invalid = RepoDiffStore(repoPath: repository.url.path, savedComparisonSelection: .againstBranch("missing"))
+        var changes: [DiffComparisonSelection] = []
+        invalid.onComparisonSelectionChanged = { changes.append($0) }
+        await invalid.refresh()
+        XCTAssertNil(invalid.comparisonBranch)
+        XCTAssertTrue(invalid.comparisonEntries.isEmpty)
+        XCTAssertEqual(changes.last, .localChanges)
+    }
+
+    func testSelectBranchesRejectsInvalidPairsAndLoadsValidComparison() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("branch", "comparison")
+        try repository.advanceBranch("comparison", fileContents: "branch diff\n")
+        let store = RepoDiffStore(repoPath: repository.url.path)
+        await store.refresh()
+
+        store.selectComparisonBranches(from: "main", to: "missing")
+        XCTAssertFalse(store.isComparingBranches)
+        store.selectComparisonBranches(from: "main", to: "main")
+        XCTAssertFalse(store.isComparingBranches)
+        store.selectComparisonBranches(from: "main", to: "comparison")
+        XCTAssertTrue(store.isComparingBranches)
+        XCTAssertEqual(store.comparisonBaseBranch, "main")
+        XCTAssertEqual(store.comparisonTargetBranch, "comparison")
+        try await waitUntil { store.selectedDiff?.rawText.contains("branch diff") == true }
+
+        store.selectComparisonBranch(nil)
+        try await waitUntil { !store.isComparingBranches }
+        XCTAssertNil(store.comparisonBranch)
+    }
+
+    func testSelectionAndMetadataRefreshUpdateDiff() async throws {
+        let repository = try TemporaryGitRepository()
+        try Data("changed\n".utf8).write(to: repository.url.appendingPathComponent("tracked.txt"))
+        let store = RepoDiffStore(repoPath: repository.url.path)
+        await store.refresh()
+        let entry = try XCTUnwrap(store.allEntries.first)
+        store.select(entry)
+        try await waitUntil { store.selectedDiff?.rawText.contains("changed") == true }
+        store.select(entry)
+        XCTAssertEqual(store.selectedFileID, entry.id)
+
+        store.selectComparisonBranch("main")
+        try await waitUntil { store.comparisonBranch == "main" }
+        store.refreshGitMetadata()
+        try await waitUntil { store.hasLoadedInitialStatus }
+    }
+
+    private func waitUntil(
+        timeout: Duration = .seconds(5),
+        condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTFail("The expected diff store state did not arrive before the timeout.")
+    }
+}
+
 private final class TemporaryGitRepository {
     let url: URL
 
