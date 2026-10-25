@@ -77,3 +77,7 @@ Percobaan tambahan `terminal.updateFullScreen()` pada callback scrollback juga t
 - Jika folder worktree untuk branch yang dipilih hilang, aplikasi menghapus metadata worktree itu saja sebelum membuat ulang. Metadata worktree lain tidak lagi terkena `git worktree prune` global.
 
 Verifikasi: harness Swift 6 pada repo Git sementara berhasil membaca rename dengan tab, nama Unicode, file dengan newline, jumlah baris staged/untracked, dan pembaruan setelah index berubah. Pemeriksaan tipe komponen metadata dengan isolasi MainActor dan `git diff --check` berhasil. Build Xcode penuh dicoba, tetapi resolusi paket berhenti sebelum kompilasi karena cache SwiftPM di luar workspace tidak dapat ditulis dari sandbox.
+
+## Kebersihan warning test
+
+Tiga helper penulisan fixture pada `CoreLogicTests` kini membuang nilai URL hasil secara eksplisit. Warning Swift “Result of call to `write(_:contents:)` is unused” tidak lagi muncul tanpa mengubah isi atau alur pengujian.
