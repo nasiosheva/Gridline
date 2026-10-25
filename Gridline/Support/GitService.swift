@@ -21,11 +21,13 @@ struct RepoHeaderStatus: Equatable {
 enum GitService {
     /// Mengambil ringkasan header dari keluaran status porcelain yang juga
     /// dipakai panel diff, agar repo hanya dipindai sekali saat pane dibuka.
-    static func headerStatus(from output: String) -> RepoHeaderStatus {
+    static func headerStatus(from records: [Substring]) -> RepoHeaderStatus {
         var status = RepoHeaderStatus()
 
-        let lines = output.split(separator: "\n")
-        for line in lines {
+        var index = 0
+        while index < records.count {
+            let line = records[index]
+            index += 1
             if line.hasPrefix("# branch.head ") {
                 let name = line.dropFirst("# branch.head ".count)
                 if name == "(detached)" {
@@ -45,6 +47,9 @@ enum GitService {
                 }
             } else if !line.hasPrefix("#") {
                 status.changedFileCount += 1
+                if line.hasPrefix("2 "), index < records.count {
+                    index += 1 // Original path of a rename/copy is a separate -z field.
+                }
             }
         }
         return status

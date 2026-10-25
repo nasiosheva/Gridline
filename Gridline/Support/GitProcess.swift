@@ -4,8 +4,8 @@
 //
 //  Helper umum untuk memanggil `git` lewat `Process`. Semua pemanggilan Git
 //  di aplikasi melewati sini. Status dan diff bersifat baca saja serta memakai
-//  `--no-optional-locks`; `GitWorktreeService` menjalankan `worktree add` hanya
-//  setelah pengguna memilih branch untuk pane baru.
+//  `--no-optional-locks`; `GitWorktreeService` hanya mengubah metadata worktree
+//  saat pengguna memilih branch untuk pane baru.
 //
 
 import Foundation

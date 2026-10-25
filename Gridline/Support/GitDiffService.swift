@@ -51,7 +51,7 @@ enum GitDiffService {
             at: path
         )
         async let countsOutput = GitProcess.run(
-            ["--no-optional-locks", "diff", "--no-ext-diff", "--numstat"] + revisions + ["--"],
+            ["--no-optional-locks", "diff", "--no-ext-diff", "--numstat", "-z"] + revisions + ["--"],
             at: path
         )
         let (output, countsResult) = await (statusOutput, countsOutput)
@@ -108,7 +108,7 @@ enum GitDiffService {
     /// lengkap dengan jumlah baris ditambah/dihapus.
     static func statusSnapshot(at path: String) async -> GitDiffStatusSnapshot {
         let statusOutput = await GitProcess.run(
-            ["--no-optional-locks", "status", "--porcelain=v2", "--branch"],
+            ["--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z"],
             at: path
         )
         guard statusOutput.exitCode == 0 else {
@@ -116,8 +116,9 @@ enum GitDiffService {
             return GitDiffStatusSnapshot(entries: [], headerStatus: nil)
         }
 
-        var entries = parsePorcelainV2(statusOutput.stdout)
-        let headerStatus = GitService.headerStatus(from: statusOutput.stdout)
+        let records = statusOutput.stdout.split(separator: "\0", omittingEmptySubsequences: true)
+        var entries = parsePorcelainV2(records)
+        let headerStatus = GitService.headerStatus(from: records)
         let untrackedFiles = entries.filter { $0.group == .untracked }.map(\.path)
 
         async let stagedCounts = numstat(at: path, cached: true)
@@ -154,36 +155,37 @@ enum GitDiffService {
         return GitDiffStatusSnapshot(entries: entries, headerStatus: headerStatus)
     }
 
-    private static func parsePorcelainV2(_ output: String) -> [DiffFileEntry] {
+    private static func parsePorcelainV2(_ records: [Substring]) -> [DiffFileEntry] {
         var entries: [DiffFileEntry] = []
-
-        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
-            if line.hasPrefix("1 ") {
+        var index = 0
+        while index < records.count {
+            let record = records[index]
+            index += 1
+            if record.hasPrefix("1 ") {
                 // 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
-                let fields = line.split(separator: " ", maxSplits: 8, omittingEmptySubsequences: true)
+                let fields = record.split(separator: " ", maxSplits: 8, omittingEmptySubsequences: true)
                 guard fields.count == 9 else { continue }
                 let xy = fields[1]
                 let filePath = String(fields[8])
                 appendOrdinary(xy: xy, path: filePath, into: &entries)
-            } else if line.hasPrefix("2 ") {
-                // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X-score> <path>\t<origPath>
-                let fields = line.split(separator: " ", maxSplits: 9, omittingEmptySubsequences: true)
+            } else if record.hasPrefix("2 ") {
+                // With -z, the original path follows as a separate NUL-terminated field.
+                let fields = record.split(separator: " ", maxSplits: 9, omittingEmptySubsequences: true)
                 guard fields.count == 10 else { continue }
+                guard index < records.count else { break }
                 let xy = fields[1]
-                let pathsField = fields[9]
-                let parts = pathsField.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: true)
-                guard let newPath = parts.first else { continue }
-                let origPath = parts.count > 1 ? String(parts[1]) : ""
-                appendRenameOrCopy(xy: xy, path: String(newPath), origPath: origPath, into: &entries)
-            } else if line.hasPrefix("u ") {
+                let originalPath = String(records[index])
+                index += 1
+                appendRenameOrCopy(xy: xy, path: String(fields[9]), origPath: originalPath, into: &entries)
+            } else if record.hasPrefix("u ") {
                 // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
-                let fields = line.split(separator: " ", maxSplits: 10, omittingEmptySubsequences: true)
+                let fields = record.split(separator: " ", maxSplits: 10, omittingEmptySubsequences: true)
                 guard fields.count == 11 else { continue }
                 let filePath = String(fields[10])
                 entries.append(DiffFileEntry(path: filePath, group: .staged, status: .unmerged))
                 entries.append(DiffFileEntry(path: filePath, group: .unstaged, status: .unmerged))
-            } else if line.hasPrefix("? ") {
-                let filePath = String(line.dropFirst(2))
+            } else if record.hasPrefix("? ") {
+                let filePath = String(record.dropFirst(2))
                 entries.append(DiffFileEntry(path: filePath, group: .untracked, status: .untracked))
             }
             // "!" (ignored) sengaja tidak ditangani — git status default tidak menyertakannya.
@@ -267,7 +269,7 @@ enum GitDiffService {
     }
 
     private static func numstat(at path: String, cached: Bool) async -> [String: LineCounts] {
-        var args = ["--no-optional-locks", "diff", "--numstat"]
+        var args = ["--no-optional-locks", "diff", "--numstat", "-z"]
         if cached { args.insert("--cached", at: 2) }
         let output = await GitProcess.run(args, at: path)
         guard output.exitCode == 0 else { return [:] }
@@ -276,36 +278,27 @@ enum GitDiffService {
 
     private static func parseNumstat(_ output: String) -> [String: LineCounts] {
         var result: [String: LineCounts] = [:]
-        for line in output.split(separator: "\n", omittingEmptySubsequences: true) {
-            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
-            guard fields.count >= 3 else { continue }
+        let records = output.split(separator: "\0", omittingEmptySubsequences: false)
+        var index = 0
+        while index < records.count {
+            let record = records[index]
+            index += 1
+            let fields = record.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+            guard fields.count == 3 else { continue }
             let added = Int(fields[0])
             let deleted = Int(fields[1])
-            let filePath = resolveNumstatPath(fields[2...])
+            let filePath: String
+            if fields[2].isEmpty {
+                // Rename/copy: counts<TAB><NUL>oldPath<NUL>newPath<NUL>.
+                guard index + 1 < records.count else { break }
+                filePath = String(records[index + 1])
+                index += 2
+            } else {
+                filePath = String(fields[2])
+            }
             result[filePath] = LineCounts(additions: added, deletions: deleted)
         }
         return result
-    }
-
-    /// Nama file di `--numstat` bisa berupa `old => new` (umum) atau, untuk
-    /// path dengan rename besar, dua kolom terpisah `old\tnew`.
-    private static func resolveNumstatPath(_ fields: ArraySlice<Substring>) -> String {
-        if fields.count > 1 {
-            return String(fields.last!)
-        }
-        let raw = String(fields.first ?? "")
-        if let range = raw.range(of: " => ") {
-            let before = raw[raw.startIndex..<range.lowerBound]
-            let after = raw[range.upperBound...]
-            if let braceOpen = before.lastIndex(of: "{"), let braceClose = after.firstIndex(of: "}") {
-                let prefix = before[before.startIndex..<braceOpen]
-                let suffix = after[after.index(after: braceClose)...]
-                let middle = after[after.startIndex..<braceClose]
-                return "\(prefix)\(middle)\(suffix)"
-            }
-            return String(after)
-        }
-        return raw
     }
 
     nonisolated private static func untrackedCount(at path: String, file: String) -> LineCounts? {

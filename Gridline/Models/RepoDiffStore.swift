@@ -5,7 +5,8 @@
 //  Sesi runtime panel diff satu repo: daftar file berubah, file yang dipilih,
 //  dan isi diffnya. Hidup lepas dari pane (sama seperti RepoSession untuk
 //  terminal) supaya status tidak hilang saat berpindah pane/repo aktif, dan
-//  diperbarui otomatis lewat FSEvents + debounce.
+//  diperbarui otomatis lewat FSEvents untuk file kerja dan pemeriksaan ringan
+//  pada metadata Git selama pane terlihat.
 //
 
 import Combine
@@ -36,7 +37,7 @@ final class RepoDiffStore: ObservableObject {
     @Published private(set) var hasLoadedInitialStatus = false
 
     private var watcher: RepoFileWatcher?
-    private var headWatcher: GitHEADWatcher?
+    private var metadataWatcher: GitMetadataWatcher?
     private var diffLoadToken = UUID()
     private var comparisonBranchesLoadedAt: Date?
     private var refreshRequestedAgain = false
@@ -102,15 +103,18 @@ final class RepoDiffStore: ObservableObject {
             watcher = RepoFileWatcher(path: repoPath) { [weak self] in
                 Task { await self?.refresh() }
             }
-            headWatcher = GitHEADWatcher(repoPath: repoPath) { [weak self] in
+            metadataWatcher = GitMetadataWatcher(repoPath: repoPath, watchedBranches: { [weak self] in
+                guard let self else { return [] }
+                return [self.comparisonBranch, self.comparisonBaseBranch, self.comparisonTargetBranch].compactMap { $0 }
+            }) { [weak self] in
                 self?.refreshGitMetadata()
             }
             Task { await refresh() }
         } else {
             watcher?.stop()
             watcher = nil
-            headWatcher?.stop()
-            headWatcher = nil
+            metadataWatcher?.stop()
+            metadataWatcher = nil
         }
     }
 
@@ -202,9 +206,8 @@ final class RepoDiffStore: ObservableObject {
         return Date.now.timeIntervalSince(comparisonBranchesLoadedAt) >= Configuration.comparisonBranchCacheDuration
     }
 
-    /// Perubahan branch bisa hanya menyentuh `.git/`, yang dikecualikan dari
-    /// FSEvents. Muat ulang status dan daftar branch saat picker atau jendela
-    /// dibuka kembali, melewati cache branch 15 detik.
+    /// Perubahan metadata Git bisa hanya menyentuh `.git/`, yang dikecualikan
+    /// dari watcher file kerja. Lewati cache branch ketika metadata berubah.
     func refreshGitMetadata() {
         comparisonBranchesLoadedAt = nil
         Task { await refresh() }
@@ -293,7 +296,6 @@ final class RepoDiffStore: ObservableObject {
             selectedDiff = nil
             return
         }
-        guard selectedDiff?.entry != entry else { return }
         let token = UUID()
         diffLoadToken = token
         let diff: FileDiff

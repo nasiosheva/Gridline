@@ -67,15 +67,17 @@ enum GitWorktreeService {
             return destination(path: worktree.path, commonGitDirectory: commonDirectory, sourceRepoID: repo.id, branch: branch)
         }
 
-        if listedWorktrees.contains(where: { $0.branch == branch }) {
+        if let missingWorktree = listedWorktrees.first(where: {
+            $0.branch == branch && !FileManager.default.fileExists(atPath: $0.path)
+        }) {
             // Git can retain metadata for a worktree whose folder was removed externally.
-            // Prune only after confirming this selected branch points at a missing path.
-            let pruneResult = await GitProcess.run(
-                ["worktree", "prune", "--expire", "now"],
+            // Remove only the selected worktree's stale metadata.
+            let removeResult = await GitProcess.run(
+                ["worktree", "remove", "--force", missingWorktree.path],
                 at: repo.path
             )
-            guard pruneResult.exitCode == 0 else {
-                throw GitWorktreeError.commandFailed(pruneResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+            guard removeResult.exitCode == 0 else {
+                throw GitWorktreeError.commandFailed(removeResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
 

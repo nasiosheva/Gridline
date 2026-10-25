@@ -69,3 +69,11 @@ Build Debug Xcode berhasil. Dengan output bertahap, viewport digeser ke tengah s
 Uji lanjutan scrollback terminal: perubahan redraw yang dikoaleskan khusus setelah callback scroll juga tidak mencegah layar kosong saat output terus masuk, sehingga patch tersebut dibuang. Renderer Metal SwiftTerm dicoba sementara dan menunjukkan gejala kosong yang sama setelah interaksi scrollbar; renderer default tetap dipakai. Reproduksi terkontrol memakai 180 baris output bertahap: setelah scrollback terlihat, area terminal kembali kosong ketika stream berlanjut; menekan Page Up menggambar riwayat lagi. Kedua tab uji ditutup dan satu shell idle dipertahankan. Akar masalah masih terbuka.
 
 Percobaan tambahan `terminal.updateFullScreen()` pada callback scrollback juga tetap mereproduksi area kosong selama stream aktif. Patch ini dibuang. Xcode berhasil build dengan patch percobaan; kode terminal kembali ke baseline. Sesi uji dihentikan dan tab sementara ditutup.
+
+## Konsistensi diff dan metadata Git
+
+- Status porcelain v2 dan jumlah baris diff kini dibaca dengan pemisah NUL (`-z`). Nama file Unicode, tab, newline, dan rename/copy dipakai sebagai path asli; hitungan file berubah tidak lagi menghitung path lama rename dua kali.
+- Diff file terpilih dimuat ulang saat status diperbarui, termasuk ketika ukuran dan jumlah baris perubahan tetap sama. Metadata Git (HEAD, index, ref branch aktif/perbandingan, dan packed refs) diperiksa ringan setiap detik hanya saat pane ditampilkan, sehingga staging dan commit dari luar aplikasi memicu refresh.
+- Jika folder worktree untuk branch yang dipilih hilang, aplikasi menghapus metadata worktree itu saja sebelum membuat ulang. Metadata worktree lain tidak lagi terkena `git worktree prune` global.
+
+Verifikasi: harness Swift 6 pada repo Git sementara berhasil membaca rename dengan tab, nama Unicode, file dengan newline, jumlah baris staged/untracked, dan pembaruan setelah index berubah. Pemeriksaan tipe komponen metadata dengan isolasi MainActor dan `git diff --check` berhasil. Build Xcode penuh dicoba, tetapi resolusi paket berhenti sebelum kompilasi karena cache SwiftPM di luar workspace tidak dapat ditulis dari sandbox.
