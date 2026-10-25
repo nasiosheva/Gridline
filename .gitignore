@@ -21,3 +21,6 @@ build/
 CLAUDE.md
 .claude/
 .codebase-memory/
+
+# Aider local history and cache
+.aider*
