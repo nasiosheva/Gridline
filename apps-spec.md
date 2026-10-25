@@ -180,7 +180,7 @@ Diff berada di area atas setiap pane sebagai tab yang tidak bisa ditutup.
 - Di pane kecil, mode unified dipakai secara otomatis jika lebar area atas kurang dari batas minimum split.
 
 **Navigasi**
-- ↑/↓ memilih file sebelumnya atau berikutnya di daftar file.
+- Saat daftar file diff mendapat fokus, ↑/↓ memilih file sebelumnya atau berikutnya; terminal tetap memakai ↑/↓ untuk history saat terminal yang mendapat fokus.
 - ⌥↑/⌥↓ pindah ke hunk sebelumnya atau berikutnya di dalam diff.
 
 **Pembaruan**
@@ -297,7 +297,7 @@ Ini fitur utama apps.
 | ⌘P | Quick switcher: buka file, atau pindah ke repo tersimpan dengan mengetik |
 | ⌘T | Tab terminal baru di pane aktif |
 | ⌘W | Tutup tab aktif (terminal atau viewer). Tidak pernah menutup pane atau repo |
-| ⌘⇧W | Tutup repo dari pane aktif (dengan konfirmasi jika ada proses berjalan) |
+| ⌘⇧W | Tutup repo dari pane aktif (dengan konfirmasi jika ada perintah terminal aktif; prompt shell idle tidak memicu konfirmasi) |
 | ⌘1 sampai ⌘4 | Fokus ke pane ke-n |
 | ⌥⌘ + panah | Pindah fokus ke pane terdekat |
 | ⌃⌘M | Maksimalkan atau kembalikan pane aktif |
@@ -408,6 +408,7 @@ Pemisahan ini penting: sesi terminal hidup di model repo, sehingga pane bisa dit
 
 **Aturan yang tidak boleh dilanggar saat implementasi**
 - Menutup pane, menutup repo dari pane, memaksimalkan pane, atau memindahkan fokus **tidak pernah** menghentikan proses terminal.
+- Konfirmasi tutup repo hanya muncul jika ada perintah terminal aktif; shell zsh yang kembali ke prompt idle tidak dihitung sebagai perintah aktif. Alur tutup repo satuan dan tutup semua repo memakai definisi yang sama.
 - Proses hanya berhenti karena pengguna menutup tab terminalnya secara eksplisit, atau aplikasi ditutup.
 - Repo yang tidak tampil di pane tetap menjalankan proses dan tetap mencatat status "selesai" atau "error" untuk penanda pane.
 
@@ -470,6 +471,8 @@ Setiap milestone bisa dipakai dan diuji sebelum lanjut ke berikutnya. Keputusan 
 10. [x] Grid pane dinamis: pilih 1 sampai jumlah repo tersimpan, dengan baris seimbang, pembagi, fokus (⌘1–⌘4 dan ⌥⌘ panah), dan batas ukuran minimum.
 
 Tambahan 2026-10-24: menu **Layout** menyatukan tambah pane dan pilihan jumlah dinamis. Menu **•••** pada header menyediakan maksimalkan, mode terminal, dan tutup repo. Tombol **×** 32×32 pt di pojok kanan atas menutup pane; pane terakhir tidak dapat ditutup, dan menutup pane tidak menghentikan sesi repo. Pane kosong menyediakan **Buka Repo…** serta menu repo terakhir.
+
+Menu bar macOS menyediakan aksi repository dan pane; tidak ada baris menu tambahan di dalam jendela. Menu **Repository** menyediakan **Tampilkan Satu Repo…**, yang beralih ke satu pane lalu membuka Quick Switcher untuk memilih repo; jika pane lain memiliki perintah aktif, konfirmasi muncul lebih dahulu. Menu **Pane** menyediakan pilihan jumlah pane dinamis, tambah pane, dan fokus pane. Dengan begitu seluruh tinggi konten jendela tersedia untuk grid.
 
 Tambahan 2026-10-24: menu **Repo → Tutup Semua Repo dari Pane** memproses tiap pane, termasuk pane yang sedang tersembunyi. Pane dengan perintah terminal aktif menampilkan konfirmasi satu per satu; **Hentikan dan Tutup** menghentikan semua tab terminal repo itu lalu menutup repo dari pane, sedangkan **Jangan Tutup** mempertahankan repo dan sesi lalu lanjut ke pane berikutnya. Pane tanpa perintah aktif ditutup tanpa konfirmasi dan sesi idle tetap hidup. Repo tersimpan dan berkas di disk tidak dihapus.
 

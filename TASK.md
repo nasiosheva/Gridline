@@ -85,10 +85,12 @@ Sedang berjalan. Catatan desain dan verifikasi per langkah ada di bawah:
   - Verifikasi: typecheck Swift berhasil; build penuh dan smoke test runtime menunggu Xcode GUI.
 - [ ] **13. Tutup repo dari pane (⌘⇧W) + toast "Repo ditutup · Buka lagi"** *(implementasi siap; verifikasi build pending)*
   - Tombol × dan shortcut ⌘⇧W melepas repo dari pane aktif tanpa menghentikan `RepoSession` di registry.
+  - Konfirmasi hanya muncul saat ada perintah aktif; shell idle tidak memicu konfirmasi. Alur tutup satu repo dan tutup semua repo menggunakan hitungan perintah aktif yang sama.
   - Toast sementara menyediakan aksi **Buka lagi** untuk mengembalikan repo ke pane asal.
   - Verifikasi: typecheck Swift berhasil; build penuh dan smoke test runtime menunggu Xcode GUI.
 - [ ] **14. Layar pertama (grid kosong, placeholder repo terakhir, pemulihan jendela+pane)** *(implementasi siap; verifikasi build pending)*
   - Pane kosong menampilkan hingga tiga repo terakhir sebagai tombol, selain tombol Buka Repo.
+  - Memilih repo terbaru yang sudah berada di slot lain menukar penempatan ke pane yang dituju, sama seperti pemilih repo di header.
   - Pane dengan path yang sudah dipindah/dihapus menampilkan peringatan dan tombol cari ulang folder.
   - Susunan pane, repo, pane aktif, divider, dan frame jendela tetap dipulihkan melalui state JSON/autosave yang sudah ada.
   - Jumlah tampilan yang lebih kecil menyembunyikan pane yang tidak muat tanpa menghapus slot atau sesi repo; memilih tampilan lebih besar menampilkan pane itu kembali.
@@ -98,6 +100,7 @@ Sedang berjalan. Catatan desain dan verifikasi per langkah ada di bawah:
   - Pane dapat membuka branch lokal lain di worktree terpisah dari menu pane; sesi terminal, diff, dan viewer tetap terisolasi per worktree.
   - Worktree baru disimpan di `~/Library/Application Support/Gridline/Worktrees/`; menutup pane tidak menghapus folder atau perubahan pengguna.
   - Pane worktree menyimpan referensi repo sumber dan branch. Jika foldernya hilang, aksi **Pilih Branch Lagi…** membuka pemilih dari repo sumber dan mengganti pane yang sama; metadata worktree Git stale dipruning sebelum pembuatan ulang.
+  - Jika branch terpilih sudah dibuka di pane lain, penempatan repo ditukar agar pane yang sedang dipulihkan menampilkan worktree terpilih.
   - Verifikasi executable model untuk identitas worktree sudah berhasil; build penuh dan smoke test dua pane masih pending.
 
 Permintaan tambahan 2026-10-24 (di luar 21 checklist): menu **Layout** menggabungkan tambah pane dan pilihan mode tampilan; menu **•••** per pane menggabungkan maksimalkan, mode terminal, tutup repo, dan tutup pane. Pane kosong memakai tombol utama **Buka Repo…** dan menu **Repo Terakhir**. Tutup pane menghapus slot, memilih pane tetangga bila pane aktif ditutup, melindungi pane terakhir, dan membiarkan repo beserta sesi terminalnya tetap hidup. Typecheck seluruh source Swift berhasil; build GUI dan smoke test masih pending.
@@ -105,6 +108,16 @@ Permintaan tambahan 2026-10-24 (di luar 21 checklist): menu **Layout** menggabun
 Perubahan tambahan 2026-10-24: memilih tampilan dengan jumlah pane lebih sedikit meminta konfirmasi jika repo yang akan tersembunyi memiliki command terminal aktif. Prompt zsh yang idle tidak memicu konfirmasi. Dialog menyatakan bahwa proses tetap berjalan dan pane dapat ditampilkan kembali. Pengujian tidak dijalankan sesuai instruksi pengguna.
 
 Perubahan tambahan 2026-10-24: saat mengurangi jumlah pane, slot berisi repo kini diprioritaskan daripada slot kosong. Pane aktif tetap diprioritaskan jika sedang menampilkan repo; pane kosong yang baru dibuat tidak lagi menggantikan repo hanya karena sedang aktif.
+
+Perubahan tambahan 2026-10-25: menyamakan tiga alur pemilihan/penutupan pane. Tutup repo satuan kini hanya meminta konfirmasi untuk perintah aktif seperti alur tutup semua; pilihan repo terbaru memakai perilaku swap yang sama dengan pemilih repo di header; pemulihan pane worktree yang memilih branch yang sudah terbuka mengarahkan worktree itu ke pane tujuan. Build dan test tidak dijalankan.
+
+Perubahan tambahan 2026-10-25: toolbar memiliki menu **Aksi Workspace**. **Tampilkan Satu Repo…** mengubah layout menjadi satu pane lalu membuka Quick Switcher; jika ada perintah aktif di pane yang akan disembunyikan, alur menunggu konfirmasi sebelum membuka Quick Switcher. Menu juga menautkan pemilih repo pane aktif, Kelola Repo Tersimpan, dan Tutup Semua Repo dari Pane. Build dan test tidak dijalankan.
+
+Perubahan tambahan 2026-10-25: baris toolbar dalam jendela dihapus agar grid pane memakai seluruh tinggi area konten. Aksi pemilihan repo dipindah ke menu bar **Repository**, dan pilihan jumlah pane dipindah ke menu **Pane**. Aksi **Tampilkan Satu Repo…** tetap meminta konfirmasi sebelum menyembunyikan pane dengan perintah aktif. Build dan test tidak dijalankan.
+
+Perubahan tambahan 2026-10-25: navigasi ↑/↓ di daftar file diff sekarang ditangani oleh list yang difokuskan; fokus terminal tetap mengirim ↑/↓ ke shell, dan ⌥↑/⌥↓ memilih hunk dari daftar maupun area diff. Pemilihan mengikuti file yang lolos filter diff. Build dan test tidak dijalankan.
+
+Perubahan tambahan 2026-10-25: setter selection SwiftUI pada daftar diff menunda pemanggilan `RepoDiffStore.select` hingga pembaruan view selesai, agar perubahan `@Published` tidak terjadi di tengah render. Build dan test tidak dijalankan.
 
 ---
 
@@ -194,3 +207,11 @@ Permintaan tambahan 2026-10-24: dropdown header hanya menampilkan repo dengan pa
 Permintaan tambahan 2026-10-24: pane ditutup langsung dengan tombol **×** 32×32 pt di pojok kanan atas, termasuk pane kosong dan repo yang path-nya hilang. Tombol hanya melepas pane; repo dan sesi terminal tetap tersimpan. Pane terakhir tetap tidak bisa ditutup.
 
 Permintaan tambahan 2026-10-24: tinjauan performa menghilangkan proses Git per file untracked, mengecualikan `.git` dari FSEvents, menyatukan debounce ke latency native, menghentikan watcher repo/viewer saat pane tidak terlihat tanpa mematikan sesi terminal, serta melazy-render baris diff dan menghitung filter file sekali per body. Daftar branch pada pemilih Local Changes juga memiliki pencarian inline. Build dan verifikasi GUI untuk perubahan ini masih pending.
+
+Perbaikan diagnostik compiler 2026-10-25: helper I/O file, resolusi link terminal, hitung baris file untracked, dan buffer pipe Git diselaraskan dengan isolasi `MainActor` default. Callback `openFileHandler` memakai capture kuat yang konsisten, selector Find memakai `#selector`, dan binding daftar diff menunda perubahan selection hingga update view selesai. Build/test tidak dijalankan sesuai instruksi; verifikasi build tetap pending.
+
+Pembaruan navigasi diff 2026-10-25: area diff mengambil keyboard focus saat diklik; monitor event lokal mengabaikan flag `.numericPad` pada tombol panah, lalu menangani ↑/↓ untuk memilih file terlihat dan ⌥↑/⌥↓ untuk berpindah hunk sebelum event diteruskan ke terminal. Klik daftar mengaktifkan monitor langsung; monitor dilepas saat area diff menghilang. Build/test tidak dijalankan sesuai instruksi.
+
+Penyempurnaan UI diff 2026-10-25: fokus keyboard ditandai garis aksen pada daftar file, file terpilih diberi aksen berbeda dari hover, dan petunjuk ↑↓/⌥↑↓ ditampilkan saat area diff aktif. Copy Indonesia dan English ditambahkan ke katalog lokalisasi. Build/test belum dijalankan.
+
+Verifikasi pengiriman 2026-10-25: parser Swift untuk file yang berubah, JSON lokalisasi, dan `git diff --check` berhasil. Build Debug dicoba tetapi berhenti sebelum kompilasi karena DNS GitHub tidak tersedia dan cache manifest SwiftPM di luar workspace ditolak sandbox. Uji GUI masih pending.

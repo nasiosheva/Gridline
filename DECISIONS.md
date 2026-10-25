@@ -118,3 +118,23 @@ Alasan: daftar repo perlu bisa dirapikan tanpa menghapus pekerjaan pengguna seca
 **D35. Tutup pane memakai tombol × langsung di pojok kanan atas dengan target klik 32×32 pt.**
 Tombol tersedia pada pane berisi repo, pane kosong, dan pane dengan repo yang hilang. Menutup pane hanya melepas tampilan; sesi repo tetap hidup. Pane terakhir tidak dapat ditutup.
 Alasan: aksi tutup pane harus terlihat dan mudah dijangkau tanpa membuka menu tindakan.
+
+**D36. Konfirmasi penutupan repo memakai status perintah aktif, bukan status shell hidup.**
+Tutup satu repo dan tutup semua repo sama-sama meminta konfirmasi hanya jika ada perintah terminal aktif. Prompt zsh idle tidak memicu konfirmasi; konfirmasi tetap menjelaskan bahwa sesi dipertahankan bila repo hanya dilepas dari pane.
+Alasan: shell terminal yang hidup di prompt idle bukan proses kerja yang perlu konfirmasi, dan dua cara menutup repo harus memberi hasil yang sama.
+
+**D37. Memilih repo untuk pane yang dituju memakai perilaku swap yang konsisten dari semua entry point.**
+Pemilih header, repo terbaru, quick switcher, dan pemulihan worktree mengarahkan repo terpilih ke pane tujuan. Jika repo sudah berada pada pane lain, penempatan ditukar agar repo sebelumnya tetap berada di workspace.
+Alasan: aksi yang dimulai dari pane tertentu harus memberi hasil di pane itu tanpa menduplikasi repo atau menyembunyikan slot secara tak terduga.
+
+**D38. Toolbar menyediakan menu Aksi Workspace untuk pemilihan repo dan pengelolaan pane.**
+Aksi **Tampilkan Satu Repo…** mengubah layout ke satu pane lalu membuka Quick Switcher. Jika perubahan menyembunyikan perintah terminal aktif, konfirmasi ditampilkan dahulu dan Quick Switcher dibuka hanya setelah pengguna menyetujui. Menu juga menyediakan pemilih repo pane aktif, pengelolaan repo tersimpan, dan tutup semua repo dari pane.
+Alasan: pemilihan repo utama harus mudah ditemukan di toolbar, termasuk ketika repo yang diinginkan sedang tersembunyi di grid.
+
+**D39. Kontrol workspace tidak memakai baris toolbar di dalam jendela.**
+Aksi buka/pilih repo berada di menu bar **Repository**, dan pilihan jumlah pane berada di menu bar **Pane**. Menu aksi satu repo tetap membuka Quick Switcher dan mempertahankan konfirmasi untuk perintah aktif yang akan tersembunyi. Grid mengisi seluruh tinggi area konten jendela; pane kosong tetap menyediakan tombol **Buka Repo…**.
+Alasan: menghilangkan chrome kontrol dari area jendela memberi ruang vertikal lebih besar untuk repo tanpa menghilangkan fungsi navigasi.
+
+**D40. Tombol panah ditangani sesuai fokus keyboard.**
+Jika daftar file diff fokus, ↑/↓ memilih file dan ⌥↑/⌥↓ memilih hunk. Jika terminal fokus, ↑/↓ tetap menjalankan history shell. Navigasi file hanya mencakup entri yang lolos filter yang terlihat.
+Alasan: pintasan diff tidak boleh mengambil alih navigasi terminal, dan fokus visual harus menentukan konteks tombol panah.
