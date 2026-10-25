@@ -13,7 +13,7 @@ struct ShortcutHelpView: View {
         ("⌘W", L10n.Shortcut.closeActiveTab),
         ("⌘⇧W", L10n.Shortcut.closeRepository),
         ("⌘1–⌘4", L10n.Shortcut.focusPane),
-        ("⌥⌘ + panah", L10n.Shortcut.focusNearestPane),
+        ("⌥⌘ + ←/↑/→/↓", L10n.Shortcut.focusNearestPane),
         ("⌃⌘M", L10n.Shortcut.maximizePane),
         ("⌥⌘M", L10n.Shortcut.maximizeTerminal),
         ("⌘F", L10n.Shortcut.findInViewer),

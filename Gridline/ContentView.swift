@@ -588,7 +588,7 @@ struct ContentView: View {
             return
         }
         guard Repo(path: path).existsOnDisk else {
-            errorMessage = "Folder tidak berisi repository Git yang valid."
+            errorMessage = L10n.format(L10n.Repository.invalidRepositoryMessage, path)
             return
         }
         _ = appState.addRepo(path: path)
