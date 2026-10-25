@@ -181,6 +181,7 @@ xcodebuild -project Gridline.xcodeproj -scheme Gridline -configuration Debug -sk
 - [x] Copy UI dipusatkan dalam `Gridline/Localizable.xcstrings`, dengan kunci `LocalizedStringResource` di `Gridline/Support/L10n.swift`.
 - [x] Bahasa Indonesia (`id`) dan English (`en`) tersedia dan mengikuti preferensi bahasa macOS; belum ada pemilih bahasa di dalam aplikasi.
 - [x] Nama repo, path, branch, perintah terminal, dan keluaran terminal tetap menjadi data pengguna/teknis, bukan copy UI.
+- [x] Pesan folder Git tidak valid memakai terjemahan yang sudah ada dan menyertakan path; petunjuk arah shortcut memakai simbol panah, bukan teks bahasa tertentu. Build Debug berhasil di Xcode GUI pada 2026-10-25.
 - [x] Seluruh source Swift lolos typecheck; JSON katalog dan placeholder English/Indonesia cocok.
 - [x] Katalog ikut terkompilasi lewat build dan launch Xcode GUI. Pemilihan bahasa dan seluruh UI lokalisasi belum diverifikasi runtime; build CLI masih gagal saat SwiftPM menulis cache di luar workspace.
 
