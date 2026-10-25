@@ -61,6 +61,68 @@ enum DiffViewMode: String {
     case unified
 }
 
+private enum DiffFontMetrics {
+    private static let tabByte: UInt8 = 0x09
+    private static let tabColumns = 8
+    private static let textInset: CGFloat = 6
+    private static let splitDividerWidth: CGFloat = 1
+
+    static func gutterWidth(for fontSize: Int) -> CGFloat {
+        36 * CGFloat(fontSize) / CGFloat(GridlinePreferences.defaultDiffFontSize)
+    }
+
+    static func layout(maximumColumns: Int, mode: DiffViewMode, fontSize: Int, viewportWidth: CGFloat) -> DiffTextLayout {
+        let font = NSFont.monospacedSystemFont(ofSize: CGFloat(fontSize), weight: .regular)
+        let characterWidth = ("W" as NSString).size(withAttributes: [.font: font]).width
+        let textWidth = ceil(CGFloat(maximumColumns) * characterWidth)
+        let gutter = gutterWidth(for: fontSize)
+        let columnWidth = max((viewportWidth - splitDividerWidth) / 2, gutter + textInset + textWidth)
+        let contentWidth: CGFloat
+        switch mode {
+        case .split:
+            contentWidth = max(viewportWidth, 2 * columnWidth + splitDividerWidth)
+        case .unified:
+            contentWidth = max(viewportWidth, 2 * gutter + textInset + textWidth)
+        }
+        return DiffTextLayout(fontSize: fontSize, contentWidth: contentWidth, columnWidth: columnWidth)
+    }
+
+    static func maximumColumns(in diff: FileDiff) -> Int {
+        var maximumColumns = 0
+        for hunk in diff.hunks {
+            maximumColumns = max(maximumColumns, displayColumns(in: hunk.header))
+            for line in hunk.lines {
+                maximumColumns = max(maximumColumns, displayColumns(in: line.text))
+            }
+        }
+        return maximumColumns
+    }
+
+    private static func displayColumns(in text: String) -> Int {
+        text.utf8.reduce(0) { columns, byte in
+            columns + (byte == tabByte ? tabColumns : 1)
+        }
+    }
+}
+
+private final class DiffColumnCountCache {
+    private var rawText: String?
+    private var maximumColumns = 0
+
+    func count(for diff: FileDiff) -> Int {
+        guard rawText != diff.rawText else { return maximumColumns }
+        maximumColumns = DiffFontMetrics.maximumColumns(in: diff)
+        rawText = diff.rawText
+        return maximumColumns
+    }
+}
+
+private struct DiffTextLayout {
+    let fontSize: Int
+    let contentWidth: CGFloat
+    let columnWidth: CGFloat
+}
+
 struct DiffAreaView: View {
     @ObservedObject var store: RepoDiffStore
     /// Dipanggil saat pengguna double-click file di daftar untuk membukanya
@@ -68,6 +130,8 @@ struct DiffAreaView: View {
     var onOpenFile: (String) -> Void = { _ in }
     var showsFileList = true
     @AppStorage("gridline.diffViewMode") private var modeRawValue: String = DiffViewMode.split.rawValue
+    @AppStorage(GridlinePreferences.diffFontSizeKey)
+    private var fontSize = GridlinePreferences.defaultDiffFontSize
     @State private var selectedHunkID: DiffHunk.ID?
     @FocusState private var diffHasKeyboardFocus: Bool
     @State private var keyboardMonitor = DiffKeyboardEventMonitor()
@@ -85,6 +149,7 @@ struct DiffAreaView: View {
                     store: store,
                     mode: mode,
                     selectedHunkID: $selectedHunkID,
+                    fontSize: fontSize,
                     onToggleMode: { modeRawValue = $0.rawValue },
                     onToggleFocus: { store.isFocusMode = false },
                     showsFocusToggle: showsFileList
@@ -93,6 +158,7 @@ struct DiffAreaView: View {
                 HSplitView {
                     DiffFileListView(
                         store: store,
+                        fontSize: fontSize,
                         onOpenFile: onOpenFile,
                         onVisibleEntriesChange: { keyboardMonitor.visibleEntryIDs = $0 },
                         isKeyboardFocused: diffHasKeyboardFocus,
@@ -106,6 +172,7 @@ struct DiffAreaView: View {
                         store: store,
                         mode: mode,
                         selectedHunkID: $selectedHunkID,
+                        fontSize: fontSize,
                         onToggleMode: { modeRawValue = $0.rawValue },
                         onToggleFocus: { store.isFocusMode = true },
                         showsFocusToggle: showsFileList
@@ -175,6 +242,7 @@ private struct GitUnavailableView: View {
 
 private struct DiffFileListView: View {
     @ObservedObject var store: RepoDiffStore
+    let fontSize: Int
     let onOpenFile: (String) -> Void
     let onVisibleEntriesChange: ([String]) -> Void
     let isKeyboardFocused: Bool
@@ -322,6 +390,7 @@ private struct DiffFileListView: View {
                     DiffFileRow(
                         entry: entry,
                         repoPath: store.repoPath,
+                        fontSize: fontSize,
                         isSelected: store.selectedFileID == entry.id
                     )
                         .tag(entry.id)
@@ -438,16 +507,18 @@ private struct DiffBranchPickerPopover: View {
 private struct DiffFileRow: View {
     let entry: DiffFileEntry
     let repoPath: String
+    let fontSize: Int
     let isSelected: Bool
 
     var body: some View {
         HStack(spacing: 6) {
             Text(entry.status.letter)
-                .font(.caption.monospaced())
+                .font(.system(size: CGFloat(fontSize), design: .monospaced))
                 .foregroundStyle(statusColor)
                 .frame(width: 14)
 
             Text(entry.displayName)
+                .font(.system(size: CGFloat(fontSize + 2)))
                 .lineLimit(1)
                 .help(entry.path)
 
@@ -455,12 +526,12 @@ private struct DiffFileRow: View {
 
             if let additions = entry.additions, additions > 0 {
                 Text("+\(additions)")
-                    .font(.caption2.monospaced())
+                    .font(.system(size: CGFloat(fontSize - 1), design: .monospaced))
                     .foregroundStyle(.green)
             }
             if let deletions = entry.deletions, deletions > 0 {
                 Text("-\(deletions)")
-                    .font(.caption2.monospaced())
+                    .font(.system(size: CGFloat(fontSize - 1), design: .monospaced))
                     .foregroundStyle(.red)
             }
         }
@@ -508,6 +579,8 @@ private struct DiffContentView: View {
     @ObservedObject var store: RepoDiffStore
     let mode: DiffViewMode
     @Binding var selectedHunkID: DiffHunk.ID?
+    let fontSize: Int
+    @State private var columnCountCache = DiffColumnCountCache()
     var onToggleMode: (DiffViewMode) -> Void
     var onToggleFocus: () -> Void
     var showsFocusToggle: Bool
@@ -590,6 +663,32 @@ private struct DiffContentView: View {
                 .accessibilityLabel(store.isFocusMode ? L10n.Diff.restoreFileList : L10n.Diff.focus)
             }
 
+            Menu {
+                Button(L10n.Diff.increaseTextSize) {
+                    GridlinePreferences.adjustDiffFontSize(by: 1)
+                }
+                .disabled(fontSize >= GridlinePreferences.maximumDiffFontSize)
+
+                Button(L10n.Diff.decreaseTextSize) {
+                    GridlinePreferences.adjustDiffFontSize(by: -1)
+                }
+                .disabled(fontSize <= GridlinePreferences.minimumDiffFontSize)
+
+                Divider()
+
+                Button(L10n.Diff.resetTextSize) {
+                    GridlinePreferences.resetDiffFontSize()
+                }
+                .disabled(fontSize == GridlinePreferences.defaultDiffFontSize)
+            } label: {
+                Image(systemName: "textformat.size")
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .help(L10n.Diff.textSize)
+            .accessibilityLabel(L10n.Diff.textSize)
+
             Picker(L10n.Diff.mode, selection: Binding(get: { mode }, set: { onToggleMode($0 == mode ? mode : $0) })) {
                 Text(L10n.Diff.splitMode).tag(DiffViewMode.split)
                 Text(L10n.Diff.unifiedMode).tag(DiffViewMode.unified)
@@ -602,23 +701,32 @@ private struct DiffContentView: View {
     }
 
     private func hunkScrollView(diff: FileDiff) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(diff.hunks) { hunk in
-                        DiffHunkView(hunk: hunk, mode: mode)
-                            .id(hunk.id)
-                            .background(hunk.id == selectedHunkID ? Color.accentColor.opacity(0.08) : Color.clear)
+        GeometryReader { geometry in
+            let layout = DiffFontMetrics.layout(
+                maximumColumns: columnCountCache.count(for: diff),
+                mode: mode,
+                fontSize: fontSize,
+                viewportWidth: geometry.size.width
+            )
+            ScrollViewReader { proxy in
+                ScrollView([.horizontal, .vertical]) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(diff.hunks) { hunk in
+                            DiffHunkView(hunk: hunk, mode: mode, layout: layout)
+                                .id(hunk.id)
+                                .background(hunk.id == selectedHunkID ? Color.accentColor.opacity(0.08) : Color.clear)
+                        }
                     }
+                    .frame(width: layout.contentWidth, alignment: .leading)
                 }
-            }
-            .onAppear {
-                selectedHunkID = diff.hunks.first?.id
-            }
-            .onChange(of: selectedHunkID) { _, newValue in
-                guard let newValue else { return }
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    proxy.scrollTo(newValue, anchor: .top)
+                .onAppear {
+                    selectedHunkID = diff.hunks.first?.id
+                }
+                .onChange(of: selectedHunkID) { _, newValue in
+                    guard let newValue else { return }
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        proxy.scrollTo(newValue, anchor: .topLeading)
+                    }
                 }
             }
         }
@@ -628,26 +736,29 @@ private struct DiffContentView: View {
 private struct DiffHunkView: View {
     let hunk: DiffHunk
     let mode: DiffViewMode
+    let layout: DiffTextLayout
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(hunk.header)
-                .font(.caption.monospaced())
+                .font(.system(size: CGFloat(layout.fontSize), design: .monospaced))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(width: layout.contentWidth, alignment: .leading)
                 .background(Color.secondary.opacity(0.1))
 
             switch mode {
             case .unified:
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(hunk.lines) { line in
-                        UnifiedDiffLineView(line: line)
+                        UnifiedDiffLineView(line: line, layout: layout)
                     }
                 }
             case .split:
-                SplitDiffLinesView(lines: hunk.lines)
+                SplitDiffLinesView(lines: hunk.lines, layout: layout)
             }
         }
     }
@@ -655,20 +766,23 @@ private struct DiffHunkView: View {
 
 private struct UnifiedDiffLineView: View {
     let line: DiffLine
+    let layout: DiffTextLayout
 
     var body: some View {
         HStack(spacing: 0) {
             Text(line.oldLineNumber.map(String.init) ?? "")
-                .frame(width: 36, alignment: .trailing)
+                .frame(width: DiffFontMetrics.gutterWidth(for: layout.fontSize), alignment: .trailing)
                 .foregroundStyle(.secondary)
             Text(line.newLineNumber.map(String.init) ?? "")
-                .frame(width: 36, alignment: .trailing)
+                .frame(width: DiffFontMetrics.gutterWidth(for: layout.fontSize), alignment: .trailing)
                 .foregroundStyle(.secondary)
             Text(line.text.isEmpty ? " " : line.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.leading, 6)
         }
-        .font(.system(size: 11, design: .monospaced))
+        .font(.system(size: CGFloat(layout.fontSize), design: .monospaced))
+        .frame(width: layout.contentWidth, alignment: .leading)
         .padding(.vertical, 1)
         .background(backgroundColor)
     }
@@ -687,12 +801,13 @@ private struct UnifiedDiffLineView: View {
 /// bila jumlahnya sama, selain itu ditumpuk berurutan di kolom masing-masing.
 private struct SplitDiffLinesView: View {
     let lines: [DiffLine]
+    let layout: DiffTextLayout
 
     var body: some View {
         let rows = Self.pairRows(from: lines)
         LazyVStack(spacing: 0) {
             ForEach(rows.indices, id: \.self) { index in
-                SplitDiffRow(left: rows[index].0, right: rows[index].1)
+                SplitDiffRow(left: rows[index].0, right: rows[index].1, layout: layout)
             }
         }
     }
@@ -733,29 +848,31 @@ private struct SplitDiffLinesView: View {
 private struct SplitDiffRow: View {
     let left: DiffLine?
     let right: DiffLine?
+    let layout: DiffTextLayout
 
     var body: some View {
         HStack(spacing: 0) {
             lineColumn(left)
-                .frame(maxWidth: .infinity, alignment: .leading)
             Divider()
             lineColumn(right)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(.system(size: 11, design: .monospaced))
+        .font(.system(size: CGFloat(layout.fontSize), design: .monospaced))
+        .frame(width: layout.contentWidth, alignment: .leading)
     }
 
     @ViewBuilder
     private func lineColumn(_ line: DiffLine?) -> some View {
         HStack(spacing: 0) {
             Text(line?.oldLineNumber.map(String.init) ?? (line?.newLineNumber.map(String.init) ?? ""))
-                .frame(width: 36, alignment: .trailing)
+                .frame(width: DiffFontMetrics.gutterWidth(for: layout.fontSize), alignment: .trailing)
                 .foregroundStyle(.secondary)
             Text(line?.text ?? "")
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.leading, 6)
         }
         .padding(.vertical, 1)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: layout.columnWidth, alignment: .leading)
         .background(backgroundColor(for: line))
     }
 

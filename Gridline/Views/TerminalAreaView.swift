@@ -11,6 +11,8 @@ import SwiftUI
 struct TerminalAreaView: View {
     @ObservedObject var session: RepoSession
     let isActivePane: Bool
+    @AppStorage(GridlinePreferences.terminalFontSizeKey)
+    private var terminalFontSize = GridlinePreferences.defaultTerminalFontSize
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +51,30 @@ struct TerminalAreaView: View {
             .help(L10n.Terminal.newTab)
 
             Spacer()
+
+            Button {
+                GridlinePreferences.adjustTerminalFontSize(by: -1)
+            } label: {
+                Image(systemName: "textformat.size.smaller")
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(terminalFontSize <= GridlinePreferences.minimumTerminalFontSize)
+            .help(L10n.Terminal.decreaseTextSize)
+            .accessibilityLabel(L10n.Terminal.decreaseTextSize)
+
+            Button {
+                GridlinePreferences.adjustTerminalFontSize(by: 1)
+            } label: {
+                Image(systemName: "textformat.size.larger")
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(terminalFontSize >= GridlinePreferences.maximumTerminalFontSize)
+            .help(L10n.Terminal.increaseTextSize)
+            .accessibilityLabel(L10n.Terminal.increaseTextSize)
         }
         .padding(.horizontal, 4)
         .frame(height: 28)

@@ -38,6 +38,14 @@ enum TerminalAppearance {
         terminalView.nativeBackgroundColor = background
         terminalView.caretColor = foreground
         terminalView.installColors(ansiPalette)
+        applyFont(to: terminalView)
+    }
+
+    static func applyFont(to terminalView: GridlineTerminalView) {
+        terminalView.font = NSFont.monospacedSystemFont(
+            ofSize: CGFloat(GridlinePreferences.terminalFontSize()),
+            weight: .regular
+        )
     }
 
     private static func color(_ hex: UInt32) -> SwiftTerm.Color {

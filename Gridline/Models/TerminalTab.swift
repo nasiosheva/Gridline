@@ -38,6 +38,7 @@ final class TerminalTab: Identifiable, ObservableObject {
     private let shellName: String
     private let commandStateFileURL: URL
     private var scrollbackPreferenceObserver: NSObjectProtocol?
+    private var fontPreferenceObserver: NSObjectProtocol?
     private var hasStartedProcess = false
     private var hasRecordedTermination = false
 
@@ -86,6 +87,14 @@ final class TerminalTab: Identifiable, ObservableObject {
         ) { [weak view] notification in
             guard let limit = notification.userInfo?[GridlinePreferences.scrollbackLimitUserInfoKey] as? Int else { return }
             view?.changeScrollback(limit)
+        }
+        fontPreferenceObserver = NotificationCenter.default.addObserver(
+            forName: GridlinePreferences.terminalFontSizeChanged,
+            object: nil,
+            queue: .main
+        ) { [weak view] _ in
+            guard let view else { return }
+            TerminalAppearance.applyFont(to: view)
         }
 
         proxy.onTitleChange = { [weak self] title in
@@ -180,6 +189,9 @@ final class TerminalTab: Identifiable, ObservableObject {
     deinit {
         if let scrollbackPreferenceObserver {
             NotificationCenter.default.removeObserver(scrollbackPreferenceObserver)
+        }
+        if let fontPreferenceObserver {
+            NotificationCenter.default.removeObserver(fontPreferenceObserver)
         }
         try? FileManager.default.removeItem(at: commandStateFileURL)
     }

@@ -452,6 +452,12 @@
         }
       }
     },
+    "diff.decrease_text_size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Decrease diff text size" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Perkecil teks diff" } }
+      }
+    },
     "diff.focus" : {
       "localizations" : {
         "en" : {
@@ -514,6 +520,12 @@
             "value" : "Sembunyikan file besar atau perubahan di atas batas baris"
           }
         }
+      }
+    },
+    "diff.increase_text_size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Increase diff text size" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Perbesar teks diff" } }
       }
     },
     "diff.install_command_line_tools" : {
@@ -708,6 +720,12 @@
         }
       }
     },
+    "diff.reset_text_size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reset diff text size" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Atur ulang ukuran teks diff" } }
+      }
+    },
     "diff.restore_file_list" : {
       "localizations" : {
         "en" : {
@@ -802,6 +820,12 @@
             "value" : "Branch tujuan"
           }
         }
+      }
+    },
+    "diff.text_size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Diff text size" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Ukuran teks diff" } }
       }
     },
     "diff.unified_mode" : {
@@ -2138,6 +2162,22 @@
         }
       }
     },
+    "terminal.decrease_text_size" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decrease terminal text size"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perkecil teks terminal"
+          }
+        }
+      }
+    },
     "terminal.failed_notification" : {
       "localizations" : {
         "en" : {
@@ -2166,6 +2206,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Proses terminal selesai."
+          }
+        }
+      }
+    },
+    "terminal.increase_text_size" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Increase terminal text size"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Perbesar teks terminal"
           }
         }
       }
