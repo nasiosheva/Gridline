@@ -178,8 +178,9 @@ xcodebuild -project Gridline.xcodeproj -scheme Gridline -configuration Debug -sk
 ## Test integrasi metadata Git (2026-10-25)
 
 - [x] Target `GridlineTests` dan scheme `Gridline` ditambahkan.
-- [x] Test mencakup refresh status setelah perubahan index saja, perubahan ref branch aktif tanpa perubahan file `HEAD`, perubahan ref branch perbandingan, dan pemuatan ulang diff terpilih saat jumlah baris tetap sama.
-- [x] Build dan jalankan suite lewat scheme `Gridline` di Xcode GUI pada 2026-10-25: 4 tes lulus, 0 gagal. Perintah CLI yang setara: `xcodebuild -project Gridline.xcodeproj -scheme Gridline -configuration Debug -destination 'platform=macOS' -skipPackagePluginValidation test`.
+- [x] Test mencakup refresh metadata Git, parsing/resolusi link terminal, pemuatan file, model diff, preferensi, layout pane, persistensi state, `RepoDiffStore`, status TCC, dan cabang tampilan viewer/picker.
+- [x] Build dan jalankan suite lewat scheme `Gridline` di Xcode GUI pada 2026-10-25: 48 tes lulus, 0 gagal. Perintah CLI yang setara: `xcodebuild -project Gridline.xcodeproj -scheme Gridline -configuration Debug -destination 'platform=macOS' -skipPackagePluginValidation test`.
+- [x] Coverage aktif pada scheme. Laporan Xcode yang sempat diukur dengan 40 tes menunjukkan `Gridline.app` 51,8% (10.429 executable lines); sesudahnya jumlah tes naik menjadi 48, tetapi laporan coverage belum diukur ulang. Angka ini bukan klaim coverage 100%.
 - Probe Swift mandiri pada `GitMetadataWatcher` lolos untuk ketiga perubahan index/ref; ini tidak memverifikasi target XCTest atau pembaruan UI.
 - Verifikasi CLI sebelumnya terhenti sebelum kompilasi karena sandbox tidak mengizinkan SwiftPM menulis diagnostik manifest ke cache pengguna dan jaringan tidak dapat mengakses GitHub. Run Xcode GUI berhasil.
 
