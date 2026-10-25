@@ -34,9 +34,9 @@ final class TerminalTab: Identifiable, ObservableObject {
     var onOpenPath: ((TerminalLinkTarget) -> Void)?
     var onProcessTerminated: ((Int32?) -> Void)?
 
-    private let delegateProxy: LocalProcessDelegateProxy
-    private let shellName: String
-    private let commandStateFileURL: URL
+    let delegateProxy: LocalProcessDelegateProxy
+    let shellName: String
+    let commandStateFileURL: URL
     private var scrollbackPreferenceObserver: NSObjectProtocol?
     private var fontPreferenceObserver: NSObjectProtocol?
     private var hasStartedProcess = false
@@ -47,10 +47,18 @@ final class TerminalTab: Identifiable, ObservableObject {
     }
 
     var hasActiveCommand: Bool {
+        Self.hasActiveCommand(
+            isRunning: isRunning,
+            shellName: shellName,
+            commandState: try? Data(contentsOf: commandStateFileURL)
+        )
+    }
+
+    static func hasActiveCommand(isRunning: Bool, shellName: String, commandState: Data?) -> Bool {
         guard isRunning else { return false }
         guard shellName == "zsh" else { return true }
-        guard let data = try? Data(contentsOf: commandStateFileURL),
-              let state = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+        guard let commandState,
+              let state = String(data: commandState, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
             return true
         }
         return state != "idle"
@@ -151,7 +159,7 @@ final class TerminalTab: Identifiable, ObservableObject {
         isRunning = true
     }
 
-    private func recordStartFailure() {
+    func recordStartFailure() {
         guard !hasRecordedTermination else { return }
         hasRecordedTermination = true
         isRunning = false
@@ -160,7 +168,7 @@ final class TerminalTab: Identifiable, ObservableObject {
         onProcessTerminated?(nil)
     }
 
-    private func recordTermination(_ exitCode: Int32?) {
+    func recordTermination(_ exitCode: Int32?) {
         guard !hasRecordedTermination else { return }
         hasRecordedTermination = true
         isRunning = false
@@ -200,7 +208,7 @@ final class TerminalTab: Identifiable, ObservableObject {
 
 /// `processDelegate` perlu objek terpisah (bukan `TerminalTab` langsung) karena
 /// protokol SwiftTerm mensyaratkan `AnyObject` yang hidup lepas dari closure yang menangkapnya.
-private final class LocalProcessDelegateProxy: NSObject, LocalProcessTerminalViewDelegate {
+final class LocalProcessDelegateProxy: NSObject, LocalProcessTerminalViewDelegate {
     var onTitleChange: ((String) -> Void)?
     var onTerminated: ((Int32?) -> Void)?
     var onDirectoryChange: ((String) -> Void)?

@@ -1,5 +1,6 @@
 import AppKit
 import XCTest
+import UserNotifications
 @testable import Gridline
 
 @MainActor
@@ -54,7 +55,7 @@ final class TerminalLinkResolverTests: XCTestCase {
 
     func testFindsOneNestedBasenameAndReportsAmbiguousBasenames() throws {
         let directory = try TemporaryTestDirectory()
-        let onlyMatch = try directory.write("Sources/Unique.swift", contents: "")
+        _ = try directory.write("Sources/Unique.swift", contents: "")
         let uniqueResult = TerminalLinkResolver.resolve(raw: "Unique.swift:3", cwd: directory.url.path, repoPath: directory.url.path)
         guard case .file(let uniquePath, let uniqueLine, let uniqueIsOutsideRepo) = uniqueResult else {
             return XCTFail("Expected the unique basename to resolve")
@@ -76,8 +77,8 @@ final class TerminalLinkResolverTests: XCTestCase {
 
     func testDoesNotSearchPathFragmentsAndSkipsHiddenFiles() throws {
         let directory = try TemporaryTestDirectory()
-        try directory.write("Nested/Only.swift", contents: "")
-        try directory.write(".hidden/Secret.swift", contents: "")
+        _ = try directory.write("Nested/Only.swift", contents: "")
+        _ = try directory.write(".hidden/Secret.swift", contents: "")
 
         XCTAssertEqual(
             TerminalLinkResolver.resolve(raw: "Nested/Missing.swift", cwd: directory.url.path, repoPath: directory.url.path),
@@ -113,8 +114,10 @@ final class FileLoaderTests: XCTestCase {
         let directory = try TemporaryTestDirectory()
         let file = try directory.write("text.txt", contents: "a\n😀b\n")
         let result = FileLoader.load(path: file.path)
+        let resultID = result.id
 
         guard case .text(let text) = result.content else { return XCTFail("Expected text") }
+        XCTAssertEqual(result.id, resultID)
         XCTAssertEqual(text, "a\n😀b\n")
         XCTAssertEqual(result.lineStartOffsets, [0, 2, 6])
         XCTAssertEqual(result.fingerprint?.sizeBytes, 8)
@@ -220,6 +223,14 @@ final class DiffModelTests: XCTestCase {
         XCTAssertEqual(entry.displayName, "File.swift")
     }
 
+    func testDiffLineAndHunkIdentityAndGroupLabels() {
+        let line = DiffLine(kind: .addition, oldLineNumber: nil, newLineNumber: 1, text: "+new")
+        let hunk = DiffHunk(header: "@@ -0,0 +1 @@", lines: [line])
+        XCTAssertNotEqual(line.id, UUID())
+        XCTAssertNotEqual(hunk.id, UUID())
+        XCTAssertEqual(DiffChangeGroup.allCases.map(\.label).count, 3)
+    }
+
     func testRecentAndLargePoliciesAtBoundaries() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         var entry = DiffFileEntry(path: "file.txt", group: .unstaged, status: .modified)
@@ -235,6 +246,472 @@ final class DiffModelTests: XCTestCase {
         entry.fileSizeBytes = nil
         entry.additions = DiffVisibilityPolicy.largeChangeLineLimit
         XCTAssertTrue(DiffVisibilityPolicy.isLarge(entry))
+    }
+}
+
+@MainActor
+final class RepositoryAndShellModelTests: XCTestCase {
+    func testDiffGroupsAndRepositoryMetadataRoundTrip() throws {
+        XCTAssertEqual(DiffChangeGroup.allCases.map(\.rawValue), ["staged", "unstaged", "untracked"])
+        XCTAssertEqual(Set(DiffChangeGroup.allCases.map(\.id)), Set(["staged", "unstaged", "untracked"]))
+
+        let directory = try TemporaryTestDirectory()
+        let gitDirectory = directory.url.appendingPathComponent(".git", isDirectory: true)
+        try FileManager.default.createDirectory(at: gitDirectory, withIntermediateDirectories: true)
+        let repo = Repo(path: directory.url.path)
+        XCTAssertEqual(repo.name, directory.url.lastPathComponent)
+        XCTAssertEqual(repo.url, directory.url)
+        XCTAssertTrue(repo.existsOnDisk)
+
+        let selection: DiffComparisonSelection = .betweenBranches(base: "main", target: "feature/test")
+        var persisted = repo
+        persisted.diffComparisonSelection = selection
+        let data = try JSONEncoder().encode(persisted)
+        let decoded = try JSONDecoder().decode(Repo.self, from: data)
+        XCTAssertEqual(decoded, persisted)
+        XCTAssertEqual(decoded.diffComparisonSelection, selection)
+    }
+
+    func testRepositoryMissingMetadataAndShellLinkParsing() throws {
+        let missing = Repo(path: "/tmp/gridline-missing", displayName: "Readable name")
+        XCTAssertEqual(missing.name, "Readable name")
+        XCTAssertFalse(missing.existsOnDisk)
+
+        XCTAssertEqual(
+            ShellIntegration.parseOSC7("file://localhost/Users/test%20user/Repo"),
+            "/Users/test user/Repo"
+        )
+        XCTAssertNil(ShellIntegration.parseOSC7("https://example.com/repo"))
+        XCTAssertNil(ShellIntegration.parseOSC7("not a URL"))
+        XCTAssertEqual(ShellIntegration.environmentOverrides(forShellNamed: "bash", commandStatePath: "/tmp/state"), [])
+    }
+}
+
+@MainActor
+final class ProcessAndSessionTests: XCTestCase {
+    func testGitProcessReportsSuccessAndFailure() async {
+        let version = await GitProcess.run(["--version"], at: NSHomeDirectory())
+        XCTAssertEqual(version.exitCode, 0)
+        XCTAssertTrue(version.stdout.contains("git version"))
+
+        let gitVersion = await GitProcess.version()
+        XCTAssertTrue(gitVersion.hasPrefix("git version"))
+
+        let missing = await GitProcess.run(["status"], at: "/tmp/gridline-path-that-does-not-exist")
+        XCTAssertNotEqual(missing.exitCode, 0)
+        XCTAssertFalse(missing.stderr.isEmpty)
+        XCTAssertTrue(GitProcess.isGitAvailable)
+    }
+
+    func testRepoSessionKeepsAtLeastOneTabAndPropagatesHandlers() throws {
+        let directory = try TemporaryTestDirectory()
+        let session = RepoSession(repoPath: directory.url.path)
+        defer { session.tabs.forEach { $0.terminate() } }
+        XCTAssertEqual(session.tabs.count, 1)
+        XCTAssertEqual(session.repoPath, directory.url.path)
+        XCTAssertEqual(session.runningProcessCount, session.tabs.filter(\.isRunning).count)
+        XCTAssertEqual(session.activeCommandCount, session.tabs.filter(\.hasActiveCommand).count)
+        XCTAssertEqual(session.workStatus, RepoSession.workStatus(
+            attention: session.attention,
+            runningProcessCount: session.runningProcessCount
+        ))
+
+        var openedPath = false
+        session.openFileHandler = { target in
+            if case .file(let path, _, _) = target, path.hasSuffix("README.md") {
+                openedPath = true
+            }
+        }
+        let second = session.addTab()
+        XCTAssertEqual(session.tabs.count, 2)
+        XCTAssertNotNil(session.tabs[0].onOpenPath)
+        XCTAssertNotNil(second.onOpenPath)
+
+        _ = try directory.write("README.md", contents: "read me")
+        if case .file(let path, _, _) = TerminalLinkResolver.resolve(
+            raw: "README.md", cwd: directory.url.path, repoPath: directory.url.path
+        ) {
+            second.onOpenPath?(.file(path: path, line: nil, isOutsideRepo: false))
+        }
+        XCTAssertTrue(openedPath)
+
+        let firstID = session.tabs[0].id
+        session.closeTab(id: firstID)
+        XCTAssertEqual(session.tabs.count, 1)
+        XCTAssertNotEqual(session.activeTabID, firstID)
+        session.closeTab(id: UUID())
+        session.clearAttention()
+        XCTAssertNil(session.attention)
+    }
+
+    func testRepoSessionNotifiesAfterRecordingTerminalExit() async throws {
+        let directory = try TemporaryTestDirectory()
+        let delivered = expectation(description: "terminal exit notification")
+        var received: (String, String, Int32?)?
+        let session = RepoSession(repoPath: directory.url.path) { repoName, tabName, exitCode in
+            received = (repoName, tabName, exitCode)
+            delivered.fulfill()
+        }
+        defer { session.tabs.forEach { $0.terminate() } }
+
+        session.tabs[0].onProcessTerminated?(9)
+        XCTAssertEqual(session.attention, .failed)
+        await fulfillment(of: [delivered], timeout: 1)
+        XCTAssertEqual(received?.0, directory.url.lastPathComponent)
+        XCTAssertEqual(received?.2, 9)
+    }
+
+    func testRepoSessionClosingActiveAndLastTabsMaintainsSelection() throws {
+        let directory = try TemporaryTestDirectory()
+        let session = RepoSession(repoPath: directory.url.path)
+        defer { session.tabs.forEach { $0.terminate() } }
+        let first = try XCTUnwrap(session.tabs.first)
+        let second = session.addTab()
+
+        session.closeTab(id: second.id)
+        XCTAssertEqual(session.activeTabID, first.id)
+        session.closeTab(id: first.id)
+        XCTAssertEqual(session.tabs.count, 1)
+        XCTAssertNotEqual(session.activeTabID, first.id)
+    }
+}
+
+@MainActor
+final class TopAreaStoreTests: XCTestCase {
+    func testOpeningDuplicateSelectsExistingFileAndClosingResetsSelection() throws {
+        let directory = try TemporaryTestDirectory()
+        let file = try directory.write("README.md", contents: "line one\nline two\n")
+        let store = TopAreaStore()
+
+        let first = store.openFile(path: file.path, scrollToLine: 2)
+        let duplicate = store.openFile(path: file.path, scrollToLine: 1)
+        XCTAssertEqual(first.id, duplicate.id)
+        XCTAssertEqual(store.openFiles.count, 1)
+        XCTAssertEqual(store.selection, .file(first.id))
+        XCTAssertEqual(first.pendingScrollLine, 1)
+
+        store.closeFile(id: first.id)
+        XCTAssertTrue(store.openFiles.isEmpty)
+        XCTAssertEqual(store.selection, .diff)
+    }
+
+    func testCloseOtherFilesKeepsRequestedTabAndIgnoresUnknownID() throws {
+        let directory = try TemporaryTestDirectory()
+        let first = try directory.write("one.txt", contents: "one")
+        let second = try directory.write("two.txt", contents: "two")
+        let store = TopAreaStore()
+        let firstTab = store.openFile(path: first.path)
+        let secondTab = store.openFile(path: second.path)
+
+        store.closeOtherFiles(keeping: UUID())
+        XCTAssertEqual(store.openFiles.map(\.id), [firstTab.id, secondTab.id])
+
+        store.closeOtherFiles(keeping: firstTab.id)
+        XCTAssertEqual(store.openFiles.map(\.id), [firstTab.id])
+        XCTAssertEqual(store.selection, .file(firstTab.id))
+    }
+}
+
+@MainActor
+final class DiagnosticAndTerminalTests: XCTestCase {
+    func testDiagnosticEventMessagesAndReportContainRecordedEvents() {
+        XCTAssertEqual(DiagnosticEvent.appLaunched.message, "app.launched")
+        XCTAssertEqual(DiagnosticEvent.terminalStartFailed.message, "terminal.start_failed")
+        XCTAssertEqual(DiagnosticEvent.terminalExited(nil).message, "terminal.exited exit_code=unknown")
+        XCTAssertEqual(DiagnosticEvent.terminalExited(0).message, "terminal.exited exit_code=0")
+        XCTAssertEqual(DiagnosticEvent.gitStatusFailed(7).message, "git.status_failed exit_code=7")
+        XCTAssertEqual(DiagnosticEvent.logExportRequested.message, "diagnostics.export_requested")
+        XCTAssertEqual(DiagnosticEvent.logExported.message, "diagnostics.exported")
+        XCTAssertEqual(DiagnosticEvent.logExportFailed.message, "diagnostics.export_failed")
+
+        DiagnosticLog.shared.record(.appLaunched)
+        DiagnosticLog.shared.record(.logExported)
+        let report = DiagnosticLog.shared.report(gitVersion: "git version test")
+        XCTAssertTrue(report.contains("app.launched"))
+        XCTAssertTrue(report.contains("diagnostics.exported"))
+        XCTAssertTrue(report.contains("git version test"))
+    }
+
+    func testTerminalTabRenameAndIdleState() {
+        let tab = TerminalTab(workingDirectory: "/tmp")
+        defer { tab.terminate() }
+
+        XCTAssertFalse(tab.isRunning)
+        XCTAssertFalse(tab.hasActiveCommand)
+        tab.rename(to: "  Build  ")
+        XCTAssertEqual(tab.title, "Build")
+        tab.rename(to: "   ")
+        XCTAssertNil(tab.customTitle)
+        tab.startProcess()
+        let running = tab.isRunning
+        tab.startProcess()
+        XCTAssertEqual(tab.isRunning, running)
+    }
+
+    func testTerminalCommandDetectionHandlesShellAndCommandState() {
+        XCTAssertFalse(TerminalTab.hasActiveCommand(isRunning: false, shellName: "zsh", commandState: nil))
+        XCTAssertTrue(TerminalTab.hasActiveCommand(isRunning: true, shellName: "bash", commandState: nil))
+        XCTAssertTrue(TerminalTab.hasActiveCommand(isRunning: true, shellName: "zsh", commandState: nil))
+        XCTAssertTrue(TerminalTab.hasActiveCommand(
+            isRunning: true,
+            shellName: "zsh",
+            commandState: Data("running\n".utf8)
+        ))
+        XCTAssertFalse(TerminalTab.hasActiveCommand(
+            isRunning: true,
+            shellName: "zsh",
+            commandState: Data(" idle\n".utf8)
+        ))
+        XCTAssertTrue(TerminalTab.hasActiveCommand(
+            isRunning: true,
+            shellName: "zsh",
+            commandState: Data([0xFF])
+        ))
+    }
+
+    func testTerminalTabRecordsOnlyTheFirstLifecycleResult() {
+        let tab = TerminalTab(workingDirectory: "/tmp")
+        defer { tab.terminate() }
+        var exitCodes: [Int32?] = []
+        tab.onProcessTerminated = { exitCodes.append($0) }
+
+        tab.recordTermination(0)
+        XCTAssertFalse(tab.isRunning)
+        XCTAssertEqual(tab.attention, .completed)
+        XCTAssertEqual(exitCodes.count, 1)
+        XCTAssertEqual(exitCodes.first!, 0)
+
+        tab.recordTermination(1)
+        XCTAssertEqual(exitCodes.count, 1)
+        XCTAssertEqual(tab.attention, .completed)
+
+        let failedTab = TerminalTab(workingDirectory: "/tmp")
+        defer { failedTab.terminate() }
+        var startFailureCount = 0
+        failedTab.onProcessTerminated = { exitCode in
+            XCTAssertNil(exitCode)
+            startFailureCount += 1
+        }
+        failedTab.recordStartFailure()
+        failedTab.recordStartFailure()
+        XCTAssertEqual(startFailureCount, 1)
+        XCTAssertFalse(failedTab.isRunning)
+        XCTAssertEqual(failedTab.attention, .failed)
+    }
+
+    func testTerminalDelegateProxyForwardsLifecycleUpdates() {
+        let tab = TerminalTab(workingDirectory: "/tmp")
+        defer { tab.terminate() }
+        let proxy = tab.delegateProxy
+        var exitCode: Int32?
+        tab.onProcessTerminated = { exitCode = $0 }
+
+        proxy.sizeChanged(source: tab.terminalView, newCols: 80, newRows: 24)
+        proxy.setTerminalTitle(source: tab.terminalView, title: "Build")
+        proxy.hostCurrentDirectoryUpdate(source: tab.terminalView, directory: "file:///tmp/Repo")
+        proxy.hostCurrentDirectoryUpdate(source: tab.terminalView, directory: "https://example.com")
+        proxy.processTerminated(source: tab.terminalView, exitCode: 7)
+
+        XCTAssertEqual(tab.title, "Build")
+        XCTAssertEqual(tab.currentDirectory, "/tmp/Repo")
+        XCTAssertEqual(exitCode, 7)
+        XCTAssertEqual(tab.attention, .failed)
+    }
+
+    func testTerminalTabResolvesOpenedLinkAgainstItsCurrentDirectory() async throws {
+        let directory = try TemporaryTestDirectory()
+        let expectedFile = try directory.write("Sources/App.swift", contents: "let app = true")
+        let tab = TerminalTab(workingDirectory: directory.url.path)
+        defer { tab.terminate() }
+        let opened = expectation(description: "terminal file link")
+        var target: TerminalLinkTarget?
+        tab.onOpenPath = {
+            target = $0
+            opened.fulfill()
+        }
+
+        tab.terminalView.requestOpenLink(
+            source: tab.terminalView,
+            link: "Sources/App.swift:4",
+            params: [:]
+        )
+        await fulfillment(of: [opened], timeout: 2)
+        XCTAssertEqual(target, .file(path: expectedFile.path, line: 4, isOutsideRepo: false))
+    }
+
+    func testRepoWorkStatusTitlesAndIcons() {
+        XCTAssertEqual(RepoWorkStatus.idle.systemImage, "circle")
+        XCTAssertEqual(RepoWorkStatus.running(2).systemImage, "terminal")
+        XCTAssertEqual(RepoWorkStatus.needsAttention.systemImage, "exclamationmark.circle.fill")
+        XCTAssertEqual(RepoWorkStatus.idle.title, String(localized: L10n.Repository.workStatusIdle))
+        XCTAssertEqual(RepoWorkStatus.running(2).title, L10n.format(L10n.Repository.workStatusRunning, Int64(2)))
+        XCTAssertEqual(RepoWorkStatus.needsAttention.title, String(localized: L10n.Repository.workStatusAttention))
+    }
+
+    func testRepoAttentionAndWorkStatusMappings() {
+        XCTAssertEqual(RepoAttentionStatus.forExitCode(0), .completed)
+        XCTAssertEqual(RepoAttentionStatus.forExitCode(1), .failed)
+        XCTAssertEqual(RepoAttentionStatus.forExitCode(nil), .failed)
+        XCTAssertEqual(RepoAttentionStatus.completed.accessibilityLabel, String(localized: L10n.Repository.attentionCompleted))
+        XCTAssertEqual(RepoAttentionStatus.failed.accessibilityLabel, String(localized: L10n.Repository.attentionFailed))
+
+        XCTAssertEqual(RepoSession.workStatus(attention: nil, runningProcessCount: 0), .idle)
+        XCTAssertEqual(RepoSession.workStatus(attention: .completed, runningProcessCount: 2), .running(2))
+        XCTAssertEqual(RepoSession.workStatus(attention: .failed, runningProcessCount: 2), .needsAttention)
+    }
+
+    func testNotificationContentUsesRepositoryTabAndExitStatus() {
+        let completed = LocalNotificationService.makeContent(repoName: "Gridline", tabName: "Build", exitCode: 0)
+        XCTAssertEqual(completed.title, "Gridline — Build")
+        XCTAssertEqual(completed.body, String(localized: L10n.Terminal.finishedNotification))
+        XCTAssertNotNil(completed.sound)
+
+        let failed = LocalNotificationService.makeContent(repoName: "Gridline", tabName: "Tests", exitCode: 1)
+        XCTAssertEqual(failed.title, "Gridline — Tests")
+        XCTAssertEqual(failed.body, String(localized: L10n.Terminal.failedNotification))
+    }
+
+    func testNotificationAuthorizationMapsSystemStatuses() {
+        XCTAssertEqual(LocalNotificationAuthorizationStatus.map(.notDetermined), .notDetermined)
+        XCTAssertEqual(LocalNotificationAuthorizationStatus.map(.authorized), .authorized)
+        XCTAssertEqual(LocalNotificationAuthorizationStatus.map(.provisional), .provisional)
+        XCTAssertEqual(LocalNotificationAuthorizationStatus.map(.denied), .denied)
+    }
+
+    func testNotificationDeliveryRequestsPermissionAndHonorsAuthorization() async {
+        let alreadyAuthorized = StubLocalNotificationClient(status: .authorized)
+        await LocalNotificationService.notifyTerminalEnded(
+            repoName: "Gridline",
+            tabName: "Build",
+            exitCode: 0,
+            using: alreadyAuthorized
+        )
+        XCTAssertEqual(alreadyAuthorized.authorizationRequestCount, 0)
+        XCTAssertEqual(alreadyAuthorized.requests.count, 1)
+        XCTAssertEqual(alreadyAuthorized.requests.first?.content.title, "Gridline — Build")
+
+        let newlyAuthorized = StubLocalNotificationClient(status: .notDetermined, afterRequest: .provisional)
+        await LocalNotificationService.notifyTerminalEnded(
+            repoName: "Gridline",
+            tabName: "Tests",
+            exitCode: 1,
+            using: newlyAuthorized
+        )
+        XCTAssertEqual(newlyAuthorized.authorizationRequestCount, 1)
+        XCTAssertEqual(newlyAuthorized.requests.count, 1)
+        XCTAssertEqual(newlyAuthorized.requests.first?.content.body, String(localized: L10n.Terminal.failedNotification))
+
+        let deniedAfterRequest = StubLocalNotificationClient(status: .notDetermined, afterRequest: .denied)
+        await LocalNotificationService.notifyTerminalEnded(
+            repoName: "Gridline",
+            tabName: "Denied",
+            exitCode: nil,
+            using: deniedAfterRequest
+        )
+        XCTAssertEqual(deniedAfterRequest.authorizationRequestCount, 1)
+        XCTAssertTrue(deniedAfterRequest.requests.isEmpty)
+
+        let denied = StubLocalNotificationClient(status: .denied)
+        await LocalNotificationService.notifyTerminalEnded(
+            repoName: "Gridline",
+            tabName: "Blocked",
+            exitCode: nil,
+            using: denied
+        )
+        XCTAssertEqual(denied.authorizationRequestCount, 0)
+        XCTAssertTrue(denied.requests.isEmpty)
+    }
+}
+
+@MainActor
+private final class StubLocalNotificationClient: LocalNotificationClient {
+    private(set) var status: LocalNotificationAuthorizationStatus
+    private let afterRequest: LocalNotificationAuthorizationStatus
+    private(set) var authorizationRequestCount = 0
+    private(set) var requests: [UNNotificationRequest] = []
+
+    init(status: LocalNotificationAuthorizationStatus, afterRequest: LocalNotificationAuthorizationStatus = .authorized) {
+        self.status = status
+        self.afterRequest = afterRequest
+    }
+
+    func authorizationStatus() async -> LocalNotificationAuthorizationStatus {
+        status
+    }
+
+    func requestAuthorization() async {
+        authorizationRequestCount += 1
+        status = afterRequest
+    }
+
+    func add(_ request: UNNotificationRequest) async {
+        requests.append(request)
+    }
+}
+
+@MainActor
+final class StoreRegistryTests: XCTestCase {
+    func testTopAreaRegistryReusesStoresAndListsOpenFiles() throws {
+        let directory = try TemporaryTestDirectory()
+        let firstFile = try directory.write("one.txt", contents: "one")
+        let secondFile = try directory.write("two.txt", contents: "two")
+        let firstRepo = Repo(path: directory.url.path, displayName: "First")
+        let secondRepo = Repo(path: directory.url.path, displayName: "Second")
+        let unopenedRepo = Repo(path: "/tmp/unopened-repository", displayName: "Unopened")
+        let registry = TopAreaStoreRegistry()
+
+        let firstStore = registry.store(for: firstRepo)
+        XCTAssertTrue(firstStore === registry.store(for: firstRepo))
+        registry.selectFile(path: firstFile.path, in: firstRepo)
+        registry.selectFile(path: secondFile.path, in: secondRepo)
+
+        XCTAssertTrue(registry.openFiles(for: [unopenedRepo]).isEmpty)
+        registry.selectFile(path: firstFile.path, in: unopenedRepo)
+        XCTAssertEqual(registry.openFiles(for: [unopenedRepo]).count, 1)
+        let files = registry.openFiles(for: [firstRepo, secondRepo])
+        XCTAssertEqual(files.map(\.path), [firstFile.path, secondFile.path])
+        XCTAssertEqual(files.map(\.repoName), ["First", "Second"])
+        registry.setVisibleRepoIDs([firstRepo.id, secondRepo.id, unopenedRepo.id])
+        registry.setVisibleRepoIDs([firstRepo.id, secondRepo.id, unopenedRepo.id])
+        registry.setVisibleRepoIDs([])
+    }
+
+    func testRepoSessionStoreCachesAndTerminatesSessions() {
+        let repo = Repo(path: FileManager.default.temporaryDirectory.path)
+        let store = RepoSessionStore()
+        let session = store.session(for: repo)
+
+        XCTAssertTrue(session === store.session(for: repo))
+        XCTAssertTrue(session === store.existingSession(for: repo))
+        store.terminateAllProcesses()
+        store.terminateSession(for: repo)
+        XCTAssertNil(store.existingSession(for: repo))
+        store.terminateSession(for: repo)
+    }
+}
+
+@MainActor
+final class RepoDiffStoreRegistryTests: XCTestCase {
+    func testRegistryReusesStoresAndForwardsSelectionLifecycle() {
+        let repo = Repo(path: "/tmp/gridline-registry-fixture", worktreeBaseBranch: "main")
+        let registry = RepoDiffStoreRegistry()
+        var consumedRepoIDs: [UUID] = []
+        var changes: [DiffComparisonSelection] = []
+        registry.onWorktreeBaseBranchConsumed = { consumedRepoIDs.append($0) }
+        registry.onComparisonSelectionChanged = { _, selection in changes.append(selection) }
+
+        let store = registry.store(for: repo)
+        XCTAssertTrue(store === registry.store(for: repo))
+        registry.setVisibleRepoIDs([repo.id])
+        registry.setVisibleRepoIDs([repo.id])
+        registry.setVisibleRepoIDs([repo.id], refreshExisting: true)
+
+        store.selectComparisonBranch(nil)
+        store.selectComparisonBranch(nil)
+        registry.setVisibleRepoIDs([])
+
+        XCTAssertEqual(consumedRepoIDs, [repo.id])
+        XCTAssertEqual(changes, [.localChanges, .localChanges])
     }
 }
 
@@ -594,7 +1071,7 @@ final class FileViewerTabTests: XCTestCase {
         XCTAssertEqual(tab.pendingScrollLine, 1)
         tab.setWatching(false)
 
-        try directory.write("Sources/README.txt", contents: "updated with more bytes\n")
+        _ = try directory.write("Sources/README.txt", contents: "updated with more bytes\n")
         await tab.reload()
         guard case .text(let updatedText) = tab.content else { return XCTFail("Expected reloaded text") }
         XCTAssertEqual(updatedText, "updated with more bytes\n")
@@ -652,6 +1129,42 @@ final class PermissionAndRepositoryErrorTests: XCTestCase {
         let path = "/tmp/not-a-repository"
         let error = RepoOpenError.notAGitRepo(path: path)
         XCTAssertEqual(error.errorDescription, L10n.format(L10n.Repository.invalidRepositoryMessage, path))
+    }
+
+    func testRepositorySelectionValidationHandlesCancelValidAndInvalidFolders() throws {
+        XCTAssertNil(RepoOpener.validatedResult(for: nil))
+
+        let directory = try TemporaryTestDirectory()
+        try FileManager.default.createDirectory(
+            at: directory.url.appendingPathComponent(".git"),
+            withIntermediateDirectories: true
+        )
+        guard case .success(let validPath)? = RepoOpener.validatedResult(for: directory.url) else {
+            return XCTFail("Expected a directory with .git to be accepted")
+        }
+        XCTAssertEqual(validPath, directory.url.path)
+
+        let invalidURL = directory.url.appendingPathComponent("ordinary-folder")
+        try FileManager.default.createDirectory(at: invalidURL, withIntermediateDirectories: true)
+        guard case .failure(.notAGitRepo(let invalidPath))? = RepoOpener.validatedResult(for: invalidURL) else {
+            return XCTFail("Expected a directory without .git to be rejected")
+        }
+        XCTAssertEqual(invalidPath, invalidURL.path)
+    }
+
+    func testRepositoryPanelSelectionHandlesCancelMissingURLAndAcceptedFolder() throws {
+        let directory = try TemporaryTestDirectory()
+        try FileManager.default.createDirectory(
+            at: directory.url.appendingPathComponent(".git"),
+            withIntermediateDirectories: true
+        )
+
+        XCTAssertNil(RepoOpener.selectionResult(response: .cancel, url: directory.url))
+        XCTAssertNil(RepoOpener.selectionResult(response: .OK, url: nil))
+        guard case .success(let path)? = RepoOpener.selectionResult(response: .OK, url: directory.url) else {
+            return XCTFail("Expected the accepted repository folder")
+        }
+        XCTAssertEqual(path, directory.url.path)
     }
 }
 
@@ -741,6 +1254,93 @@ final class ZeroCoverageViewTests: XCTestCase {
         terminal.onOpenLink = { openedLink = $0 }
         terminal.requestOpenLink(source: terminal, link: "Sources/App.swift:9", params: [:])
         XCTAssertEqual(openedLink, "Sources/App.swift:9")
+    }
+
+    func testClipboardAndLineNumberRulerSetup() {
+        let pasteboard = NSPasteboard.general
+        let previousValue = pasteboard.string(forType: .string)
+        defer {
+            pasteboard.clearContents()
+            if let previousValue {
+                pasteboard.setString(previousValue, forType: .string)
+            }
+        }
+        NSPasteboard.copyString("Gridline test")
+        XCTAssertEqual(pasteboard.string(forType: .string), "Gridline test")
+
+        let scrollView = NSScrollView(frame: .zero)
+        let textView = NSTextView(frame: .zero)
+        scrollView.documentView = textView
+        let ruler = LineNumberRulerView(textView: textView)
+        ruler.setLineStartOffsets([0, 4, 12])
+        XCTAssertEqual(ruler.ruleThickness, 44)
+    }
+
+    func testPDFKitViewFactoryConfiguresPreviewView() throws {
+        let directory = try TemporaryTestDirectory()
+        let file = try directory.write("preview.pdf", contents: "%PDF-1.4")
+        let pdfView = PDFKitView.makePDFView(url: file)
+        XCTAssertTrue(pdfView.autoScales)
+    }
+
+    func testDiffAndTopAreaBodiesCoverLocalFocusAndViewerBranches() async throws {
+        let directory = try TemporaryTestDirectory()
+        let repository = Repo(path: directory.url.path, displayName: "Example")
+        let diffStore = RepoDiffStore(repoPath: directory.url.path)
+        await diffStore.refresh()
+
+        _ = DiffAreaView(store: diffStore).body
+        diffStore.isFocusMode = true
+        _ = DiffAreaView(store: diffStore).body
+        _ = DiffAreaView(store: diffStore, showsFileList: false).body
+
+        let topStore = TopAreaStore()
+        _ = TopAreaView(topAreaStore: topStore, diffStore: diffStore, viewerAsSidePanel: false, onToggleViewerAsSidePanel: {}).body
+        let file = try directory.write("README.md", contents: "read me")
+        _ = topStore.openFile(path: file.path)
+        topStore.selection = .file(topStore.openFiles[0].id)
+        _ = TopAreaView(topAreaStore: topStore, diffStore: diffStore, viewerAsSidePanel: true, onToggleViewerAsSidePanel: {}).body
+
+        _ = RepoPaneHeaderView(
+            repo: repository,
+            availableRepos: [repository],
+            diffStore: diffStore,
+            attention: .completed,
+            workStatus: .needsAttention,
+            isMaximized: false,
+            isTerminalOnly: false,
+            onSelectRepo: { _ in },
+            onManageRepositories: {},
+            onClose: {},
+            canClosePane: true,
+            onClosePane: {},
+            onToggleMaximize: {},
+            onToggleTerminalOnly: {}
+        ).body
+    }
+
+    func testDiffFontMetricsHandleTabsAndBothLayouts() {
+        let diff = FileDiff(
+            entry: DiffFileEntry(path: "file.txt", group: .unstaged, status: .modified),
+            hunks: [DiffHunk(
+                header: "@@",
+                lines: [DiffLine(kind: .context, oldLineNumber: 1, newLineNumber: 1, text: "a\tb")]
+            )],
+            isBinary: false,
+            rawText: "raw"
+        )
+        XCTAssertEqual(DiffFontMetrics.maximumColumns(in: diff), 10)
+        XCTAssertEqual(DiffFontMetrics.gutterWidth(for: GridlinePreferences.defaultDiffFontSize), 36)
+
+        let split = DiffFontMetrics.layout(maximumColumns: 10, mode: .split, fontSize: 14, viewportWidth: 100)
+        let unified = DiffFontMetrics.layout(maximumColumns: 10, mode: .unified, fontSize: 14, viewportWidth: 100)
+        XCTAssertEqual(split.fontSize, 14)
+        XCTAssertGreaterThanOrEqual(split.contentWidth, 100)
+        XCTAssertGreaterThanOrEqual(split.columnWidth, unified.columnWidth)
+
+        let cache = DiffColumnCountCache()
+        XCTAssertEqual(cache.count(for: diff), 10)
+        XCTAssertEqual(cache.count(for: diff), 10)
     }
 
     private func waitUntil(

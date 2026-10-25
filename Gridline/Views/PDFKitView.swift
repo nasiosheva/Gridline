@@ -11,11 +11,15 @@ import SwiftUI
 struct PDFKitView: NSViewRepresentable {
     let url: URL
 
-    func makeNSView(context: Context) -> PDFView {
+    static func makePDFView(url: URL) -> PDFView {
         let view = PDFView()
         view.autoScales = true
         view.document = PDFDocument(url: url)
         return view
+    }
+
+    func makeNSView(context: Context) -> PDFView {
+        Self.makePDFView(url: url)
     }
 
     func updateNSView(_ nsView: PDFView, context: Context) {

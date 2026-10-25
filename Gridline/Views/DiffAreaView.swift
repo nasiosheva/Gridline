@@ -61,7 +61,7 @@ enum DiffViewMode: String {
     case unified
 }
 
-private enum DiffFontMetrics {
+enum DiffFontMetrics {
     private static let tabByte: UInt8 = 0x09
     private static let tabColumns = 8
     private static let textInset: CGFloat = 6
@@ -105,7 +105,7 @@ private enum DiffFontMetrics {
     }
 }
 
-private final class DiffColumnCountCache {
+final class DiffColumnCountCache {
     private var rawText: String?
     private var maximumColumns = 0
 
@@ -117,7 +117,7 @@ private final class DiffColumnCountCache {
     }
 }
 
-private struct DiffTextLayout {
+struct DiffTextLayout {
     let fontSize: Int
     let contentWidth: CGFloat
     let columnWidth: CGFloat

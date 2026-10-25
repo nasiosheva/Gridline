@@ -98,14 +98,14 @@ final class GitMetadataWatcher {
         )
     }
 
-    private static func commonDirectory(for gitDirectory: URL) -> URL {
+    static func commonDirectory(for gitDirectory: URL) -> URL {
         let commonDirURL = gitDirectory.appendingPathComponent("commondir")
         guard let value = try? String(contentsOf: commonDirURL, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return gitDirectory }
         return URL(fileURLWithPath: value, relativeTo: gitDirectory).standardizedFileURL
     }
 
-    private static func gitDirectory(for repoPath: String) -> URL? {
+    static func gitDirectory(for repoPath: String) -> URL? {
         let repoURL = URL(fileURLWithPath: repoPath, isDirectory: true)
         let dotGitURL = repoURL.appendingPathComponent(".git")
         var isDirectory: ObjCBool = false

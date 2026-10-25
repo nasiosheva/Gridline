@@ -20,6 +20,10 @@ enum RepoAttentionStatus: Equatable {
         case .failed: String(localized: L10n.Repository.attentionFailed)
         }
     }
+
+    static func forExitCode(_ exitCode: Int32?) -> Self {
+        exitCode == 0 ? .completed : .failed
+    }
 }
 
 enum RepoWorkStatus: Equatable {
@@ -47,6 +51,7 @@ enum RepoWorkStatus: Equatable {
 @MainActor
 final class RepoSession: ObservableObject {
     let repoPath: String
+    private let terminalEndedNotifier: (String, String, Int32?) async -> Void
 
     @Published private(set) var tabs: [TerminalTab] = []
     @Published var activeTabID: UUID?
@@ -61,6 +66,10 @@ final class RepoSession: ObservableObject {
     }
 
     var workStatus: RepoWorkStatus {
+        Self.workStatus(attention: attention, runningProcessCount: runningProcessCount)
+    }
+
+    static func workStatus(attention: RepoAttentionStatus?, runningProcessCount: Int) -> RepoWorkStatus {
         if attention == .failed { return .needsAttention }
         if runningProcessCount > 0 { return .running(runningProcessCount) }
         return .idle
@@ -73,8 +82,18 @@ final class RepoSession: ObservableObject {
         didSet { tabs.forEach { $0.onOpenPath = openFileHandler } }
     }
 
-    init(repoPath: String) {
+    init(
+        repoPath: String,
+        terminalEndedNotifier: @escaping (String, String, Int32?) async -> Void = { repoName, tabName, exitCode in
+            await LocalNotificationService.notifyTerminalEnded(
+                repoName: repoName,
+                tabName: tabName,
+                exitCode: exitCode
+            )
+        }
+    ) {
         self.repoPath = repoPath
+        self.terminalEndedNotifier = terminalEndedNotifier
         addTab()
     }
 
@@ -85,11 +104,13 @@ final class RepoSession: ObservableObject {
         tab.onProcessTerminated = { [weak self, weak tab] exitCode in
             guard let self, let tab else { return }
             self.recordAttention(exitCode: exitCode)
-            LocalNotificationService.notifyTerminalEnded(
-                repoName: URL(fileURLWithPath: self.repoPath).lastPathComponent,
-                tabName: tab.title,
-                exitCode: exitCode
-            )
+            Task {
+                await self.terminalEndedNotifier(
+                    URL(fileURLWithPath: self.repoPath).lastPathComponent,
+                    tab.title,
+                    exitCode
+                )
+            }
         }
         tabs.append(tab)
         activeTabID = tab.id
@@ -117,6 +138,6 @@ final class RepoSession: ObservableObject {
     }
 
     private func recordAttention(exitCode: Int32?) {
-        attention = exitCode == 0 ? .completed : .failed
+        attention = RepoAttentionStatus.forExitCode(exitCode)
     }
 }

@@ -3,6 +3,31 @@ import XCTest
 
 @MainActor
 final class GitMetadataRefreshTests: XCTestCase {
+    func testGitAndCommonDirectoriesResolveRegularAndLinkedWorktrees() throws {
+        let repository = try TemporaryGitRepository()
+        let gitDirectory = repository.url.appendingPathComponent(".git", isDirectory: true)
+        XCTAssertEqual(GitMetadataWatcher.gitDirectory(for: repository.url.path), gitDirectory.standardizedFileURL)
+        XCTAssertEqual(GitMetadataWatcher.commonDirectory(for: gitDirectory), gitDirectory.standardizedFileURL)
+
+        let commonDirectory = repository.url.appendingPathComponent("common", isDirectory: true)
+        try FileManager.default.createDirectory(at: commonDirectory, withIntermediateDirectories: true)
+        try Data("../common\n".utf8).write(to: gitDirectory.appendingPathComponent("commondir"))
+        XCTAssertEqual(GitMetadataWatcher.commonDirectory(for: gitDirectory), commonDirectory.standardizedFileURL)
+
+        let linkedWorktree = repository.url.appendingPathComponent("linked", isDirectory: true)
+        try FileManager.default.createDirectory(at: linkedWorktree, withIntermediateDirectories: true)
+        let worktreeMetadata = gitDirectory.appendingPathComponent("worktrees/linked", isDirectory: true)
+        try FileManager.default.createDirectory(at: worktreeMetadata, withIntermediateDirectories: true)
+        try Data("gitdir: ../.git/worktrees/linked\n".utf8).write(to: linkedWorktree.appendingPathComponent(".git"))
+        XCTAssertEqual(GitMetadataWatcher.gitDirectory(for: linkedWorktree.path), worktreeMetadata.standardizedFileURL)
+
+        let invalidWorktree = repository.url.appendingPathComponent("invalid", isDirectory: true)
+        try FileManager.default.createDirectory(at: invalidWorktree, withIntermediateDirectories: true)
+        try Data("not a gitdir file\n".utf8).write(to: invalidWorktree.appendingPathComponent(".git"))
+        XCTAssertNil(GitMetadataWatcher.gitDirectory(for: invalidWorktree.path))
+        XCTAssertNil(GitMetadataWatcher.gitDirectory(for: invalidWorktree.appendingPathComponent("missing").path))
+    }
+
     func testIndexOnlyChangeRefreshesStagedStatus() async throws {
         let repository = try TemporaryGitRepository()
         let store = RepoDiffStore(repoPath: repository.url.path)
@@ -214,6 +239,148 @@ final class RepoDiffStoreTests: XCTestCase {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         XCTFail("The expected diff store state did not arrive before the timeout.")
+    }
+}
+
+@MainActor
+final class GitWorktreeServiceTests: XCTestCase {
+    func testBranchChoicesAreSortedAndExposeCurrentBranch() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("branch", "zeta")
+        try repository.git("branch", "alpha")
+
+        let result = await GitWorktreeService.branchChoices(at: repository.url.path)
+        let choices = try XCTUnwrap(result)
+
+        XCTAssertEqual(choices.branches, ["alpha", "main", "zeta"])
+        XCTAssertEqual(choices.currentBranch, "main")
+    }
+
+    func testCreatesAndReopensExistingWorktree() async throws {
+        let repository = try TemporaryGitRepository()
+        let branch = "coverage-create-\(UUID().uuidString.prefix(8))"
+        try repository.git("branch", branch)
+        let source = Repo(path: repository.url.path)
+
+        let created = try await GitWorktreeService.openOrCreateWorktree(branch: branch, from: source)
+        defer { _ = try? repository.git("worktree", "remove", "--force", created.path) }
+
+        XCTAssertEqual(created.branch, branch)
+        XCTAssertEqual(created.sourceRepoID, source.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: created.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: URL(fileURLWithPath: created.path).appendingPathComponent(".git").path))
+        XCTAssertTrue(created.displayName.contains(branch))
+
+        let reopened = try await GitWorktreeService.openOrCreateWorktree(branch: branch, from: source)
+        XCTAssertEqual(reopened.path, created.path)
+    }
+
+    func testRecreatesWorktreeWhenItsFolderWasRemoved() async throws {
+        let repository = try TemporaryGitRepository()
+        let branch = "coverage-stale-\(UUID().uuidString.prefix(8))"
+        try repository.git("branch", branch)
+        let source = Repo(path: repository.url.path)
+        let first = try await GitWorktreeService.openOrCreateWorktree(branch: branch, from: source)
+
+        try FileManager.default.removeItem(atPath: first.path)
+        let recreated = try await GitWorktreeService.openOrCreateWorktree(branch: branch, from: source)
+        defer { _ = try? repository.git("worktree", "remove", "--force", recreated.path) }
+
+        XCTAssertEqual(recreated.path, first.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recreated.path))
+        let worktrees = try repository.git("worktree", "list", "--porcelain")
+        XCTAssertEqual(worktrees.components(separatedBy: "branch refs/heads/\(branch)").count - 1, 1)
+    }
+
+    func testReportsPathAlreadyExistsAndInvalidRepositoryErrors() async throws {
+        let repository = try TemporaryGitRepository()
+        let branch = "coverage-existing-\(UUID().uuidString.prefix(8))"
+        try repository.git("branch", branch)
+        let source = Repo(path: repository.url.path)
+        let first = try await GitWorktreeService.openOrCreateWorktree(branch: branch, from: source)
+        try repository.git("worktree", "remove", "--force", first.path)
+        try FileManager.default.createDirectory(atPath: first.path, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: first.path) }
+
+        do {
+            _ = try await GitWorktreeService.openOrCreateWorktree(branch: branch, from: source)
+            XCTFail("Expected pathAlreadyExists")
+        } catch GitWorktreeError.pathAlreadyExists {
+            // Expected.
+        }
+
+        let invalid = Repo(path: repository.url.appendingPathComponent("missing").path)
+        let choices = await GitWorktreeService.branchChoices(at: invalid.path)
+        XCTAssertNil(choices)
+        do {
+            _ = try await GitWorktreeService.openOrCreateWorktree(branch: branch, from: invalid)
+            XCTFail("Expected commandFailed")
+        } catch GitWorktreeError.commandFailed {
+            // Expected.
+        }
+    }
+}
+
+@MainActor
+final class GitDiffServiceTests: XCTestCase {
+    func testStatusSnapshotHandlesRenamesUntrackedTabsAndBinaryFiles() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("mv", "tracked.txt", "renamed.txt")
+        let tabbedPath = "new\tfile.txt"
+        try Data("new file\n".utf8).write(to: repository.url.appendingPathComponent(tabbedPath))
+        try Data([0, 1, 2, 3]).write(to: repository.url.appendingPathComponent("binary.bin"))
+
+        let snapshot = await GitDiffService.statusSnapshot(at: repository.url.path)
+        let renamed = try XCTUnwrap(snapshot.entries.first {
+            $0.path == "renamed.txt" && $0.group == .staged
+        })
+        guard case .renamed(let original) = renamed.status else {
+            return XCTFail("Expected a staged rename")
+        }
+        XCTAssertEqual(original, "tracked.txt")
+        XCTAssertTrue(snapshot.entries.contains { $0.path == tabbedPath && $0.group == .untracked })
+        let binary = try XCTUnwrap(snapshot.entries.first { $0.path == "binary.bin" })
+        XCTAssertNil(binary.additions)
+        XCTAssertNil(binary.deletions)
+    }
+
+    func testFileDiffCoversGroupsAndShellSafeStageCommands() async throws {
+        let repository = try TemporaryGitRepository()
+        try Data("working\n".utf8).write(to: repository.url.appendingPathComponent("tracked.txt"))
+        try Data("staged\n".utf8).write(to: repository.url.appendingPathComponent("staged.txt"))
+        try repository.git("add", "staged.txt")
+        try Data([0, 1, 2]).write(to: repository.url.appendingPathComponent("binary.bin"))
+
+        let unstagedEntry = DiffFileEntry(path: "tracked.txt", group: .unstaged, status: .modified)
+        let stagedEntry = DiffFileEntry(path: "staged.txt", group: .staged, status: .added)
+        let untrackedEntry = DiffFileEntry(path: "binary.bin", group: .untracked, status: .untracked)
+        let unstagedDiff = await GitDiffService.fileDiff(at: repository.url.path, for: unstagedEntry)
+        let stagedDiff = await GitDiffService.fileDiff(at: repository.url.path, for: stagedEntry)
+        let binaryDiff = await GitDiffService.fileDiff(at: repository.url.path, for: untrackedEntry)
+
+        XCTAssertFalse(unstagedDiff.hunks.isEmpty)
+        XCTAssertFalse(stagedDiff.hunks.isEmpty)
+        XCTAssertTrue(binaryDiff.isBinary)
+        let quoted = DiffFileEntry(path: "dir/O'Reilly.txt", group: .unstaged, status: .modified)
+        XCTAssertEqual(GitDiffService.toggleStageCommand(for: quoted), "git add 'dir/O'\\''Reilly.txt'")
+        XCTAssertEqual(GitDiffService.toggleStageCommand(for: stagedEntry), "git restore --staged 'staged.txt'")
+    }
+
+    func testComparisonBranchesEntriesAndInvalidRepository() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("branch", "comparison")
+        try repository.advanceBranch("comparison", fileContents: "comparison\n")
+
+        let branches = await GitDiffService.comparisonBranches(at: repository.url.path)
+        let invalidBranches = await GitDiffService.comparisonBranches(at: "/tmp/not-a-repository")
+        XCTAssertEqual(branches, ["comparison", "main"])
+        XCTAssertEqual(invalidBranches, [])
+
+        let entries = await GitDiffService.comparisonEntries(at: repository.url.path, from: "main", to: "comparison")
+        let entry = try XCTUnwrap(entries.first { $0.path == "tracked.txt" })
+        let diff = await GitDiffService.fileDiff(at: repository.url.path, from: "main", to: "comparison", for: entry)
+        XCTAssertTrue(diff.rawText.contains("comparison"))
+        XCTAssertFalse(diff.hunks.isEmpty)
     }
 }
 

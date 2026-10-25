@@ -32,10 +32,19 @@ enum RepoOpener {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
 
-        guard panel.runModal() == .OK, let url = panel.url else {
-            return nil
-        }
+        return selectionResult(response: panel.runModal(), url: panel.url)
+    }
 
+    static func selectionResult(
+        response: NSApplication.ModalResponse,
+        url: URL?
+    ) -> Result<String, RepoOpenError>? {
+        guard response == .OK else { return nil }
+        return validatedResult(for: url)
+    }
+
+    static func validatedResult(for url: URL?) -> Result<String, RepoOpenError>? {
+        guard let url else { return nil }
         let path = url.path
         let gitPath = url.appendingPathComponent(".git").path
         guard FileManager.default.fileExists(atPath: gitPath) else {
