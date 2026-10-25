@@ -7,13 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		27D5528DECDA6B124797B0E1 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5E138D30FC3E58FDFD571C7 /* XCTest.framework */; };
+		2E5D579D4A81794A80E39791 /* GitMetadataRefreshTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9979D2DC0151C182EEF18F86 /* GitMetadataRefreshTests.swift */; };
 		27DEA61603431F08D5B6C3EF /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A1CE379D34C8ED22AA3D6BF6 /* SwiftTerm */; };
 		B17C0A000000000000000001 /* Gridline/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B17C0A000000000000000002 /* Gridline/Assets.xcassets */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		E5928EEA8C72D3F2ADB40C64 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A54C86D2308A60EA003328DB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A54C86D9308A60EA003328DB;
+			remoteInfo = Gridline;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		9979D2DC0151C182EEF18F86 /* GitMetadataRefreshTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitMetadataRefreshTests.swift; sourceTree = "<group>"; };
 		A54C86DA308A60EA003328DB /* Gridline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gridline.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B17C0A000000000000000002 /* Gridline/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Gridline/Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		B5E138D30FC3E58FDFD571C7 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
+		E75F5CBA7BF5AE48913238DE /* GridlineTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GridlineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -38,6 +53,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		26F512D7D02767CC192B3032 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				27D5528DECDA6B124797B0E1 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A54C86D7308A60EA003328DB /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -47,6 +70,23 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		45824832DF61D9E7E7756CB0 /* GridlineTests */ = {
+			isa = PBXGroup;
+			children = (
+				9979D2DC0151C182EEF18F86 /* GitMetadataRefreshTests.swift */,
+			);
+			name = GridlineTests;
+			path = GridlineTests;
+			sourceTree = "<group>";
+		};
+		982510F6C9E0F77F11EDFA74 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B5E138D30FC3E58FDFD571C7 /* XCTest.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		A526D327308C8F9E00F6ED3D /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
@@ -61,6 +101,8 @@
 				A54C86DC308A60EA003328DB /* Gridline */,
 				A54C86DB308A60EA003328DB /* Products */,
 				A526D327308C8F9E00F6ED3D /* Recovered References */,
+				982510F6C9E0F77F11EDFA74 /* Frameworks */,
+				45824832DF61D9E7E7756CB0 /* GridlineTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -68,6 +110,7 @@
 			isa = PBXGroup;
 			children = (
 				A54C86DA308A60EA003328DB /* Gridline.app */,
+				E75F5CBA7BF5AE48913238DE /* GridlineTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -75,6 +118,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		69C505C161F1F1E0142260CD /* GridlineTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 959399877F912503725F891A /* Build configuration list for PBXNativeTarget "GridlineTests" */;
+			buildPhases = (
+				05D45EB8905A352F9F3EF405 /* Sources */,
+				26F512D7D02767CC192B3032 /* Frameworks */,
+				C7837722415E7532C415A8E4 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EA592B7A07F5B7B97318CC97 /* PBXTargetDependency */,
+			);
+			name = GridlineTests;
+			productName = GridlineTests;
+			productReference = E75F5CBA7BF5AE48913238DE /* GridlineTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		A54C86D9308A60EA003328DB /* Gridline */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A54C86E5308A60EC003328DB /* Build configuration list for PBXNativeTarget "Gridline" */;
@@ -109,6 +170,10 @@
 					A54C86D9308A60EA003328DB = {
 						CreatedOnToolsVersion = 27.1;
 					};
+					69C505C161F1F1E0142260CD = {
+						CreatedOnToolsVersion = 27.1;
+						TestTargetID = A54C86D9308A60EA003328DB;
+					};
 				};
 			};
 			buildConfigurationList = A54C86D5308A60EA003328DB /* Build configuration list for PBXProject "Gridline" */;
@@ -130,11 +195,19 @@
 			projectRoot = "";
 			targets = (
 				A54C86D9308A60EA003328DB /* Gridline */,
+				69C505C161F1F1E0142260CD /* GridlineTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		C7837722415E7532C415A8E4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A54C86D8308A60EA003328DB /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -144,6 +217,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		05D45EB8905A352F9F3EF405 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2E5D579D4A81794A80E39791 /* GitMetadataRefreshTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A54C86D6308A60EA003328DB /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -151,7 +232,48 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		EA592B7A07F5B7B97318CC97 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Gridline;
+			target = A54C86D9308A60EA003328DB /* Gridline */;
+			targetProxy = E5928EEA8C72D3F2ADB40C64 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		5955EE8847B9B95D3E71BC6F /* Debug configuration for PBXNativeTarget "GridlineTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mories.adb.GridlineTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Gridline.app/Contents/MacOS/Gridline";
+			};
+			name = Debug;
+		};
+		E181205C6191EA910C2AB8D2 /* Release configuration for PBXNativeTarget "GridlineTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mories.adb.GridlineTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Gridline.app/Contents/MacOS/Gridline";
+			};
+			name = Release;
+		};
 		A54C86E3308A60EC003328DB /* Debug configuration for PBXProject "Gridline" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -333,6 +455,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		959399877F912503725F891A /* Build configuration list for PBXNativeTarget "GridlineTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E181205C6191EA910C2AB8D2 /* Release configuration for PBXNativeTarget "GridlineTests" */,
+				5955EE8847B9B95D3E71BC6F /* Debug configuration for PBXNativeTarget "GridlineTests" */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A54C86D5308A60EA003328DB /* Build configuration list for PBXProject "Gridline" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
