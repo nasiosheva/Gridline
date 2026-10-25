@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum TerminalLinkTarget: Equatable {
+nonisolated enum TerminalLinkTarget: Equatable, Sendable {
     case file(path: String, line: Int?, isOutsideRepo: Bool)
     case ambiguous(candidates: [String], line: Int?)
     case notFound(text: String)
@@ -19,7 +19,7 @@ struct TerminalLinkResolver {
     /// Memisahkan sufiks `:baris` atau `:baris:kolom` dari teks link mentah.
     /// SwiftTerm sudah membuang tanda kutip/kurung pembungkus lewat regexnya
     /// sendiri, jadi `raw` di sini sudah berupa teks path bersih.
-    static func parse(_ raw: String) -> (pathText: String, line: Int?) {
+    nonisolated static func parse(_ raw: String) -> (pathText: String, line: Int?) {
         let parts = raw.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count >= 2 else { return (raw, nil) }
 
@@ -36,7 +36,7 @@ struct TerminalLinkResolver {
         return (raw, nil)
     }
 
-    private static func resolvedCandidate(pathText: String, cwd: String) -> String {
+    nonisolated private static func resolvedCandidate(pathText: String, cwd: String) -> String {
         if pathText.hasPrefix("/") {
             return (pathText as NSString).standardizingPath
         }
@@ -45,7 +45,7 @@ struct TerminalLinkResolver {
 
     /// Resolusi penuh dengan akses disk (cek keberadaan file + pencarian nama
     /// file ambigu di repo). Melakukan I/O — panggil dari luar main thread.
-    static func resolve(raw: String, cwd: String, repoPath: String) -> TerminalLinkTarget {
+    nonisolated static func resolve(raw: String, cwd: String, repoPath: String) -> TerminalLinkTarget {
         let (pathText, line) = parse(raw)
         let candidate = resolvedCandidate(pathText: pathText, cwd: cwd)
         let standardizedRepoPath = (repoPath as NSString).standardizingPath
@@ -72,7 +72,7 @@ struct TerminalLinkResolver {
         }
     }
 
-    private static func findFiles(named basename: String, in repoPath: String, limit: Int = 25) -> [String] {
+    nonisolated private static func findFiles(named basename: String, in repoPath: String, limit: Int = 25) -> [String] {
         guard let enumerator = FileManager.default.enumerator(
             at: URL(fileURLWithPath: repoPath),
             includingPropertiesForKeys: nil,

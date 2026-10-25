@@ -81,8 +81,7 @@ struct RepoPaneView: View {
             }
         }
         .task(id: repo.id) {
-            session.openFileHandler = { [weak topAreaStore] target in
-                guard let topAreaStore else { return }
+            session.openFileHandler = { target in
                 handleLinkTarget(target, topAreaStore: topAreaStore)
             }
         }

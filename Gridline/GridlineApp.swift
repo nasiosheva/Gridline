@@ -42,7 +42,7 @@ struct GridlineApp: App {
                 Button(L10n.Menu.findInViewer) {
                     let sender = NSMenuItem()
                     sender.tag = NSTextFinder.Action.showFindInterface.rawValue
-                    NSApp.sendAction(Selector(("performFindPanelAction:")), to: nil, from: sender)
+                    NSApp.sendAction(#selector(NSTextView.performFindPanelAction(_:)), to: nil, from: sender)
                 }
                 .keyboardShortcut("f", modifiers: .command)
 
@@ -56,6 +56,10 @@ struct GridlineApp: App {
                     NotificationCenter.default.post(name: .gridlineOpenRepo, object: nil)
                 }
                 .keyboardShortcut("o", modifiers: .command)
+
+                Button(L10n.Workspace.showSingleRepository) {
+                    NotificationCenter.default.post(name: .gridlineShowSingleRepository, object: nil)
+                }
 
                 Button(L10n.Menu.searchRepositoryOrFile) {
                     NotificationCenter.default.post(name: .gridlineQuickSwitcher, object: nil)
@@ -85,6 +89,26 @@ struct GridlineApp: App {
                     appState.addPane()
                 }
                 .disabled(!appState.canAddPane)
+
+                Divider()
+
+                ForEach(1...appState.paneCountLimit, id: \.self) { count in
+                    Button {
+                        NotificationCenter.default.post(
+                            name: .gridlineRequestPaneCount,
+                            object: nil,
+                            userInfo: ["paneCount": count]
+                        )
+                    } label: {
+                        Label {
+                            Text(L10n.Layout.paneCountOption(count))
+                        } icon: {
+                            Image(systemName: appState.state.paneLayout.displayPaneCount == count
+                                  ? "checkmark"
+                                  : paneLayoutSymbol(for: count))
+                        }
+                    }
+                }
 
                 Divider()
 
@@ -150,6 +174,14 @@ struct GridlineApp: App {
             GridlineSettingsView()
         }
     }
+
+    private func paneLayoutSymbol(for count: Int) -> String {
+        switch count {
+        case 1: "rectangle"
+        case 2: "rectangle.split.2x1"
+        default: "square.grid.2x2"
+        }
+    }
 }
 
 @MainActor
@@ -168,6 +200,8 @@ extension Notification.Name {
     static let gridlineManageRepositories = Notification.Name("gridlineManageRepositories")
     static let gridlineRequestQuit = Notification.Name("gridlineRequestQuit")
     static let gridlineQuickSwitcher = Notification.Name("gridlineQuickSwitcher")
+    static let gridlineShowSingleRepository = Notification.Name("gridlineShowSingleRepository")
+    static let gridlineRequestPaneCount = Notification.Name("gridlineRequestPaneCount")
     static let gridlineShortcutHelp = Notification.Name("gridlineShortcutHelp")
     static let gridlineClearTerminal = Notification.Name("gridlineClearTerminal")
     static let gridlineToggleDiffFocus = Notification.Name("gridlineToggleDiffFocus")

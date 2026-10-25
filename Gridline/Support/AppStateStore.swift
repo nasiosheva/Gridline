@@ -191,7 +191,11 @@ final class AppStateStore: ObservableObject {
             state.savedRepos[existingIndex].worktreeBranch = branch
             state.savedRepos[existingIndex].worktreeBaseBranch = baseBranch
             if let existingPane {
-                state.paneLayout.activePaneID = existingPane.id
+                if let replacingPaneID, replacingPaneID != existingPane.id {
+                    state.paneLayout.selectRepo(repoID, in: replacingPaneID)
+                } else {
+                    state.paneLayout.activePaneID = existingPane.id
+                }
                 markRepoRecent(repoID)
                 persist()
                 return true
@@ -262,7 +266,7 @@ final class AppStateStore: ObservableObject {
     func openRepo(id: UUID, in paneID: UUID) {
         guard state.savedRepos.contains(where: { $0.id == id }) else { return }
         markRepoRecent(id)
-        state.paneLayout.restoreRepo(id, in: paneID)
+        state.paneLayout.selectRepo(id, in: paneID)
         persist()
     }
 

@@ -532,6 +532,22 @@
         }
       }
     },
+    "diff.keyboard_navigation_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "↑↓ Files · ⌥↑↓ Hunks"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "↑↓ File · ⌥↑↓ Hunk"
+          }
+        }
+      }
+    },
     "diff.loading" : {
       "localizations" : {
         "en" : {
@@ -2902,18 +2918,36 @@
         }
       }
     },
+    "workspace.actions_menu" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Workspace Actions" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Aksi Workspace" } }
+      }
+    },
+    "workspace.choose_repository_for_active_pane" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose Repository for Active Pane…" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Pilih Repo untuk Pane Aktif…" } }
+      }
+    },
+    "workspace.show_single_repository" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show One Repository…" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Tampilkan Satu Repo…" } }
+      }
+    },
     "workspace.repository_closed_message" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld terminal processes are still running. The session remains active and can be reopened."
+            "value" : "%lld terminal commands are active. The terminal session remains active and can be reopened."
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld proses terminal masih berjalan. Sesi tetap aktif dan dapat dibuka kembali."
+            "value" : "Ada %lld perintah terminal aktif. Sesi terminal tetap berjalan dan dapat dibuka kembali."
           }
         }
       }

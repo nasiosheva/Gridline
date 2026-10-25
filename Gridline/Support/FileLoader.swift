@@ -11,7 +11,8 @@
 import AppKit
 import Foundation
 
-enum FileContent {
+// The detached loader creates the image once; the UI only reads it afterwards.
+nonisolated enum FileContent: @unchecked Sendable {
     case loading
     case text(String)
     case image(NSImage)
@@ -22,13 +23,13 @@ enum FileContent {
     case error(String)
 }
 
-struct FileFingerprint: Equatable {
+nonisolated struct FileFingerprint: Equatable, Sendable {
     let sizeBytes: Int64
     let modificationDate: Date?
     let fileNumber: UInt64?
 }
 
-struct FileLoadResult {
+nonisolated struct FileLoadResult: @unchecked Sendable {
     let id = UUID()
     let content: FileContent
     let fingerprint: FileFingerprint?
@@ -36,14 +37,14 @@ struct FileLoadResult {
 }
 
 enum FileLoader {
-    static let maxTextBytes: Int64 = 5 * 1024 * 1024
-    static let maxMediaBytes: Int64 = 20 * 1024 * 1024
+    nonisolated static let maxTextBytes: Int64 = 5 * 1024 * 1024
+    nonisolated static let maxMediaBytes: Int64 = 20 * 1024 * 1024
 
-    private static let imageExtensions: Set<String> = [
+    nonisolated private static let imageExtensions: Set<String> = [
         "png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "heic", "webp"
     ]
 
-    static func fingerprint(path: String) -> FileFingerprint? {
+    nonisolated static func fingerprint(path: String) -> FileFingerprint? {
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
         guard fm.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue,
@@ -51,7 +52,7 @@ enum FileLoader {
         return makeFingerprint(from: attributes)
     }
 
-    static func load(path: String) -> FileLoadResult {
+    nonisolated static func load(path: String) -> FileLoadResult {
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
         guard fm.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else {
@@ -102,7 +103,7 @@ enum FileLoader {
         )
     }
 
-    private static func makeFingerprint(from attributes: [FileAttributeKey: Any]) -> FileFingerprint? {
+    nonisolated private static func makeFingerprint(from attributes: [FileAttributeKey: Any]) -> FileFingerprint? {
         guard let size = attributes[.size] as? Int64 else { return nil }
         let fileNumber = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
         return FileFingerprint(
@@ -112,7 +113,7 @@ enum FileLoader {
         )
     }
 
-    private static func lineStartOffsets(in text: String) -> [UInt32] {
+    nonisolated private static func lineStartOffsets(in text: String) -> [UInt32] {
         var offsets: [UInt32] = [0]
         for (index, codeUnit) in text.utf16.enumerated() where codeUnit == 10 {
             offsets.append(UInt32(index + 1))

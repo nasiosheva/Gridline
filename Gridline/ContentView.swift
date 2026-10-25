@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  Gridline
 //
-//  Root UI: toolbar grid, NSSplitViewController antar-pane, serta alur buka
+//  Root UI: NSSplitViewController antar-pane serta alur buka
 //  repo ke pane aktif. Model sesi tetap berada di registry per repo.
 //
 
@@ -32,21 +32,7 @@ struct ContentView: View {
     }
 
     private var baseContent: some View {
-        VStack(spacing: 0) {
-            GridToolbarView(
-                paneCount: visiblePaneSlots.count,
-                paneCountLimit: appState.paneCountLimit,
-                paneCountChoices: Array(1...appState.paneCountLimit),
-                canAddPane: appState.canAddPane,
-                attentionCount: attentionCount,
-                selectedPaneCount: layout.displayPaneCount,
-                onOpenRepo: openRepo,
-                onAddPane: appState.addPane,
-                onSelectPaneCount: requestPaneCount
-            )
-            Divider()
-            grid
-        }
+        grid
         .frame(minWidth: 680, minHeight: 500)
         .modifier(ClearTerminalShortcutModifier())
         .background(WindowConfigurator(autosaveName: "GridlineMainWindow"))
@@ -95,7 +81,14 @@ struct ContentView: View {
             requestQuit()
         }
         .onReceive(NotificationCenter.default.publisher(for: .gridlineQuickSwitcher)) { _ in
-            activeSheet = .quickSwitcher
+            openQuickSwitcher()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gridlineShowSingleRepository)) { _ in
+            showSingleRepositoryPicker()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gridlineRequestPaneCount)) { notification in
+            guard let paneCount = notification.userInfo?["paneCount"] as? Int else { return }
+            requestPaneCount(paneCount)
         }
         .onReceive(NotificationCenter.default.publisher(for: .gridlineShortcutHelp)) { _ in
             activeSheet = .shortcutHelp
@@ -140,6 +133,21 @@ struct ContentView: View {
         appState.openRepo(id: repo.id, in: layout.activePaneID)
     }
 
+    private func openQuickSwitcher() {
+        activeSheet = .quickSwitcher
+    }
+
+    private func showSingleRepositoryPicker() {
+        requestPaneCount(1, opensQuickSwitcherAfterward: true)
+    }
+
+    private func presentQuickSwitcherAfterCurrentAction() {
+        Task { @MainActor in
+            await Task.yield()
+            activeSheet = .quickSwitcher
+        }
+    }
+
     private func selectQuickSwitcherFile(_ file: QuickSwitcherFile) {
         guard let repo = appState.state.savedRepos.first(where: { $0.id == file.repoID }) else { return }
         appState.openRepo(id: repo.id, in: layout.activePaneID)
@@ -162,7 +170,7 @@ struct ContentView: View {
             }
             Button(L10n.Common.cancel, role: .cancel) {}
         } message: {
-            Text(L10n.format(L10n.Workspace.repositoryClosedMessage, Int64(pendingRepoClose?.runningProcessCount ?? 0)))
+            Text(L10n.format(L10n.Workspace.repositoryClosedMessage, Int64(pendingRepoClose?.activeCommandCount ?? 0)))
         }
         .confirmationDialog(
             L10n.format(L10n.Workspace.batchCloseTitle, pendingBatchClose?.repo.name ?? ""),
@@ -204,7 +212,11 @@ struct ContentView: View {
             Button(L10n.Layout.changeLayout) {
                 guard let pendingLayoutChange else { return }
                 appState.setDisplayPaneCount(pendingLayoutChange.paneCount)
+                let shouldOpenQuickSwitcher = pendingLayoutChange.opensQuickSwitcherAfterward
                 self.pendingLayoutChange = nil
+                if shouldOpenQuickSwitcher {
+                    presentQuickSwitcherAfterCurrentAction()
+                }
             }
             .keyboardShortcut(.defaultAction)
             Button(L10n.Common.cancel, role: .cancel) {}
@@ -305,9 +317,12 @@ struct ContentView: View {
         clearAttention(for: layout.activePaneID)
     }
 
-    private func requestPaneCount(_ paneCount: Int) {
+    private func requestPaneCount(_ paneCount: Int, opensQuickSwitcherAfterward: Bool = false) {
         guard paneCount < layout.displayPaneCount else {
             appState.setDisplayPaneCount(paneCount)
+            if opensQuickSwitcherAfterward {
+                presentQuickSwitcherAfterCurrentAction()
+            }
             return
         }
 
@@ -322,18 +337,16 @@ struct ContentView: View {
 
         guard activeCommandCount > 0 else {
             appState.setDisplayPaneCount(paneCount)
+            if opensQuickSwitcherAfterward {
+                presentQuickSwitcherAfterCurrentAction()
+            }
             return
         }
-        pendingLayoutChange = PendingLayoutChange(paneCount: paneCount, activeCommandCount: activeCommandCount)
-    }
-
-    private var attentionCount: Int {
-        layout.slots.reduce(into: 0) { count, slot in
-            guard let repoID = slot.repoID,
-                  let repo = appState.state.savedRepos.first(where: { $0.id == repoID }),
-                  sessionStore.existingSession(for: repo)?.attention != nil else { return }
-            count += 1
-        }
+        pendingLayoutChange = PendingLayoutChange(
+            paneCount: paneCount,
+            activeCommandCount: activeCommandCount,
+            opensQuickSwitcherAfterward: opensQuickSwitcherAfterward
+        )
     }
 
     private var availablePaneRepos: [Repo] {
@@ -585,9 +598,9 @@ struct ContentView: View {
         guard let slot = layout.slots.first(where: { $0.id == paneID }),
               let repoID = slot.repoID,
               let repo = appState.state.savedRepos.first(where: { $0.id == repoID }) else { return }
-        let runningProcessCount = sessionStore.existingSession(for: repo)?.runningProcessCount ?? 0
-        if runningProcessCount > 0 {
-            pendingRepoClose = PendingRepoClose(repo: repo, paneID: paneID, runningProcessCount: runningProcessCount)
+        let activeCommandCount = sessionStore.existingSession(for: repo)?.activeCommandCount ?? 0
+        if activeCommandCount > 0 {
+            pendingRepoClose = PendingRepoClose(repo: repo, paneID: paneID, activeCommandCount: activeCommandCount)
         } else {
             performClose(repo: repo, paneID: paneID)
         }
@@ -742,7 +755,7 @@ private struct PendingRepoClose: Identifiable {
     let id = UUID()
     let repo: Repo
     let paneID: UUID
-    let runningProcessCount: Int
+    let activeCommandCount: Int
 }
 
 private struct BatchCloseCandidate {
@@ -759,4 +772,5 @@ private struct PendingBatchClose {
 private struct PendingLayoutChange {
     let paneCount: Int
     let activeCommandCount: Int
+    let opensQuickSwitcherAfterward: Bool
 }

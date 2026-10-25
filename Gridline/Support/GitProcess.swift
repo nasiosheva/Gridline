@@ -89,7 +89,7 @@ enum GitProcess {
     }
 }
 
-private final class PipeOutputBuffer: @unchecked Sendable {
+nonisolated private final class PipeOutputBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var data = Data()
 

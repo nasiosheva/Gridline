@@ -277,8 +277,8 @@ final class RepoDiffStore: ObservableObject {
     }
 
     /// Pilih file sebelumnya/berikutnya dalam urutan staged → unstaged → untracked (↑/↓ bagian 6).
-    func selectAdjacent(offset: Int) {
-        let ordered = displayedEntries
+    func selectAdjacent(offset: Int, within entries: [DiffFileEntry]? = nil) {
+        let ordered = entries ?? displayedEntries
         guard !ordered.isEmpty else { return }
         guard let currentIndex = ordered.firstIndex(where: { $0.id == selectedFileID }) else {
             select(ordered[0])

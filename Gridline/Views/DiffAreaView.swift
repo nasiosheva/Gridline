@@ -10,6 +10,52 @@
 import AppKit
 import SwiftUI
 
+@MainActor
+private final class DiffKeyboardEventMonitor {
+    var isEnabled = false
+    var visibleEntryIDs: [String]?
+    var onMoveFile: (Int) -> Void = { _ in }
+    var onMoveHunk: (Int) -> Void = { _ in }
+
+    private var eventMonitor: Any?
+
+    func start() {
+        guard eventMonitor == nil else { return }
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, isEnabled else { return event }
+            let offset: Int
+            switch event.keyCode {
+            case 126: offset = -1 // Up
+            case 125: offset = 1  // Down
+            default: return event
+            }
+
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            let hasOption = modifiers.contains(.option)
+            let hasOtherNavigationModifier = modifiers.contains(.command)
+                || modifiers.contains(.control)
+                || modifiers.contains(.shift)
+
+            // macOS marks arrow keys with `.numericPad`; that is a key-origin
+            // flag, not a user modifier, so it must not block navigation.
+            if hasOption && !hasOtherNavigationModifier {
+                onMoveHunk(offset)
+                return nil
+            }
+            guard !hasOption, !hasOtherNavigationModifier else { return event }
+            onMoveFile(offset)
+            return nil
+        }
+    }
+
+    func stop() {
+        guard let eventMonitor else { return }
+        NSEvent.removeMonitor(eventMonitor)
+        self.eventMonitor = nil
+        isEnabled = false
+    }
+}
+
 enum DiffViewMode: String {
     case split
     case unified
@@ -22,6 +68,9 @@ struct DiffAreaView: View {
     var onOpenFile: (String) -> Void = { _ in }
     var showsFileList = true
     @AppStorage("gridline.diffViewMode") private var modeRawValue: String = DiffViewMode.split.rawValue
+    @State private var selectedHunkID: DiffHunk.ID?
+    @FocusState private var diffHasKeyboardFocus: Bool
+    @State private var keyboardMonitor = DiffKeyboardEventMonitor()
 
     private var mode: DiffViewMode {
         DiffViewMode(rawValue: modeRawValue) ?? .split
@@ -35,17 +84,28 @@ struct DiffAreaView: View {
                 DiffContentView(
                     store: store,
                     mode: mode,
+                    selectedHunkID: $selectedHunkID,
                     onToggleMode: { modeRawValue = $0.rawValue },
                     onToggleFocus: { store.isFocusMode = false },
                     showsFocusToggle: showsFileList
                 )
             } else {
                 HSplitView {
-                    DiffFileListView(store: store, onOpenFile: onOpenFile)
+                    DiffFileListView(
+                        store: store,
+                        onOpenFile: onOpenFile,
+                        onVisibleEntriesChange: { keyboardMonitor.visibleEntryIDs = $0 },
+                        isKeyboardFocused: diffHasKeyboardFocus,
+                        onRequestKeyboardFocus: {
+                            diffHasKeyboardFocus = true
+                            keyboardMonitor.isEnabled = true
+                        }
+                    )
                         .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
                     DiffContentView(
                         store: store,
                         mode: mode,
+                        selectedHunkID: $selectedHunkID,
                         onToggleMode: { modeRawValue = $0.rawValue },
                         onToggleFocus: { store.isFocusMode = true },
                         showsFocusToggle: showsFileList
@@ -54,6 +114,42 @@ struct DiffAreaView: View {
                 }
             }
         }
+        .focusable()
+        .focused($diffHasKeyboardFocus)
+        .simultaneousGesture(TapGesture().onEnded {
+            diffHasKeyboardFocus = true
+        })
+        .onChange(of: diffHasKeyboardFocus) { _, isFocused in
+            keyboardMonitor.isEnabled = isFocused
+        }
+        .onAppear {
+            keyboardMonitor.onMoveFile = { offset in
+                let entries: [DiffFileEntry]
+                if let visibleEntryIDs = keyboardMonitor.visibleEntryIDs {
+                    let entriesByID = Dictionary(uniqueKeysWithValues: store.displayedEntries.map { ($0.id, $0) })
+                    entries = visibleEntryIDs.compactMap { entriesByID[$0] }
+                } else {
+                    entries = store.displayedEntries
+                }
+                store.selectAdjacent(offset: offset, within: entries)
+            }
+            keyboardMonitor.onMoveHunk = moveHunk
+            keyboardMonitor.start()
+            keyboardMonitor.isEnabled = diffHasKeyboardFocus
+        }
+        .onDisappear {
+            keyboardMonitor.stop()
+        }
+    }
+
+    private func moveHunk(offset: Int) {
+        guard let diff = store.selectedDiff, !diff.hunks.isEmpty else { return }
+        guard let currentIndex = diff.hunks.firstIndex(where: { $0.id == selectedHunkID }) else {
+            selectedHunkID = diff.hunks.first?.id
+            return
+        }
+        let newIndex = max(0, min(diff.hunks.count - 1, currentIndex + offset))
+        selectedHunkID = diff.hunks[newIndex].id
     }
 }
 
@@ -80,6 +176,9 @@ private struct GitUnavailableView: View {
 private struct DiffFileListView: View {
     @ObservedObject var store: RepoDiffStore
     let onOpenFile: (String) -> Void
+    let onVisibleEntriesChange: ([String]) -> Void
+    let isKeyboardFocused: Bool
+    let onRequestKeyboardFocus: () -> Void
     @State private var showRecentOnly = false
     @State private var hideLargeFiles = false
     @State private var showsBranchComparison = false
@@ -143,7 +242,10 @@ private struct DiffFileListView: View {
                 get: { store.selectedFileID },
                 set: { newValue in
                     if let newValue, let entry = visibleEntries.first(where: { $0.id == newValue }) {
-                        store.select(entry)
+                        Task { @MainActor in
+                            await Task.yield()
+                            store.select(entry)
+                        }
                     }
                 }
             )) {
@@ -157,13 +259,33 @@ private struct DiffFileListView: View {
                     section(title: String(localized: DiffChangeGroup.untracked.label), entries: visibleUntracked)
                 }
             }
+            .onChange(of: visibleEntries.map(\.id), initial: true) { _, ids in
+                onVisibleEntriesChange(ids)
+            }
             .listStyle(.sidebar)
+            .focusable()
+            .simultaneousGesture(TapGesture().onEnded { onRequestKeyboardFocus() })
             .overlay {
                 if visibleEntries.isEmpty {
                     Text(emptyListMessage)
                         .foregroundStyle(.secondary)
                         .font(.callout)
                 }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(Color.accentColor.opacity(isKeyboardFocused ? 0.7 : 0), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            if isKeyboardFocused, !visibleEntries.isEmpty {
+                Text(L10n.Diff.keyboardNavigationHint)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
             }
         }
         .sheet(isPresented: $showsBranchComparison) {
@@ -197,7 +319,11 @@ private struct DiffFileListView: View {
         if !entries.isEmpty {
             Section(title) {
                 ForEach(entries) { entry in
-                    DiffFileRow(entry: entry, repoPath: store.repoPath)
+                    DiffFileRow(
+                        entry: entry,
+                        repoPath: store.repoPath,
+                        isSelected: store.selectedFileID == entry.id
+                    )
                         .tag(entry.id)
                         .onTapGesture(count: 2) {
                             let absolutePath = (store.repoPath as NSString).appendingPathComponent(entry.path)
@@ -207,6 +333,7 @@ private struct DiffFileListView: View {
             }
         }
     }
+
 }
 
 private struct DiffBranchPickerPopover: View {
@@ -311,6 +438,7 @@ private struct DiffBranchPickerPopover: View {
 private struct DiffFileRow: View {
     let entry: DiffFileEntry
     let repoPath: String
+    let isSelected: Bool
 
     var body: some View {
         HStack(spacing: 6) {
@@ -336,6 +464,21 @@ private struct DiffFileRow: View {
                     .foregroundStyle(.red)
             }
         }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.accentColor.opacity(0.22))
+            }
+        }
+        .overlay {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color.accentColor.opacity(0.75), lineWidth: 1)
+            }
+        }
+        .contentShape(Rectangle())
         .contextMenu {
             Button(L10n.Diff.copyPath) {
                 NSPasteboard.copyString((repoPath as NSString).appendingPathComponent(entry.path))
@@ -364,11 +507,10 @@ private struct DiffFileRow: View {
 private struct DiffContentView: View {
     @ObservedObject var store: RepoDiffStore
     let mode: DiffViewMode
+    @Binding var selectedHunkID: DiffHunk.ID?
     var onToggleMode: (DiffViewMode) -> Void
     var onToggleFocus: () -> Void
     var showsFocusToggle: Bool
-
-    @State private var selectedHunkID: DiffHunk.ID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -393,19 +535,8 @@ private struct DiffContentView: View {
             }
         }
         .focusable()
-        .onKeyPress(.upArrow, phases: .down) { press in
-            if press.modifiers.contains(.option) {
-                moveHunk(offset: -1)
-                return .handled
-            }
-            return .ignored
-        }
-        .onKeyPress(.downArrow, phases: .down) { press in
-            if press.modifiers.contains(.option) {
-                moveHunk(offset: 1)
-                return .handled
-            }
-            return .ignored
+        .onChange(of: store.selectedDiff?.entry.id) { _, _ in
+            selectedHunkID = store.selectedDiff?.hunks.first?.id
         }
     }
 
@@ -491,16 +622,6 @@ private struct DiffContentView: View {
                 }
             }
         }
-    }
-
-    private func moveHunk(offset: Int) {
-        guard let diff = store.selectedDiff, !diff.hunks.isEmpty else { return }
-        guard let currentIndex = diff.hunks.firstIndex(where: { $0.id == selectedHunkID }) else {
-            selectedHunkID = diff.hunks.first?.id
-            return
-        }
-        let newIndex = max(0, min(diff.hunks.count - 1, currentIndex + offset))
-        selectedHunkID = diff.hunks[newIndex].id
     }
 }
 

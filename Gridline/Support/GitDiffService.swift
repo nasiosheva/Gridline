@@ -16,9 +16,9 @@ struct GitDiffStatusSnapshot {
 }
 
 enum GitDiffService {
-    private static let maximumConcurrentUntrackedFileReads = 4
-    private static let untrackedReadChunkSize = 64 * 1024
-    private static let binaryDetectionPrefixLength = 8_000
+    nonisolated private static let maximumConcurrentUntrackedFileReads = 4
+    nonisolated private static let untrackedReadChunkSize = 64 * 1024
+    nonisolated private static let binaryDetectionPrefixLength = 8_000
 
     static func comparisonBranches(at path: String) async -> [String] {
         let branches = await GitProcess.run(
@@ -230,12 +230,12 @@ enum GitDiffService {
 
     // MARK: - Jumlah baris (numstat)
 
-    private struct LineCounts: Sendable {
+    nonisolated private struct LineCounts: Sendable {
         let additions: Int?
         let deletions: Int?
     }
 
-    private static func untrackedCounts(at path: String, files: [String]) async -> [String: LineCounts] {
+    nonisolated private static func untrackedCounts(at path: String, files: [String]) async -> [String: LineCounts] {
         guard !files.isEmpty else { return [:] }
 
         return await withTaskGroup(of: (String, LineCounts?).self) { group in
@@ -308,7 +308,7 @@ enum GitDiffService {
         return raw
     }
 
-    private static func untrackedCount(at path: String, file: String) -> LineCounts? {
+    nonisolated private static func untrackedCount(at path: String, file: String) -> LineCounts? {
         let fileURL = URL(fileURLWithPath: (path as NSString).appendingPathComponent(file))
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
               let fileType = attributes[.type] as? FileAttributeType else { return nil }

@@ -112,7 +112,7 @@ enum L10n {
         static let openFiles: LocalizedStringResource = "quick_switcher.open_files"
     }
 
-    enum Viewer {
+    nonisolated enum Viewer {
         static let tooLargeTitle: LocalizedStringResource = "viewer.too_large_title"
         static let tooLargeMessage: LocalizedStringResource = "viewer.too_large_message"
         static let mediaLimit: LocalizedStringResource = "viewer.media_limit"
@@ -149,6 +149,7 @@ enum L10n {
         static let unstaged: LocalizedStringResource = "diff.unstaged"
         static let untracked: LocalizedStringResource = "diff.untracked"
         static let selectFile: LocalizedStringResource = "diff.select_file"
+        static let keyboardNavigationHint: LocalizedStringResource = "diff.keyboard_navigation_hint"
         static let focus: LocalizedStringResource = "diff.focus"
         static let restoreFileList: LocalizedStringResource = "diff.restore_file_list"
         static let mode: LocalizedStringResource = "diff.mode"
@@ -262,6 +263,9 @@ enum L10n {
         static let clearUnavailableRepositoriesMessage: LocalizedStringResource = "workspace.clear_unavailable_repositories_message"
         static let removeFromGridline: LocalizedStringResource = "workspace.remove_from_gridline"
         static let unavailableRepository: LocalizedStringResource = "workspace.unavailable_repository"
+        static let actionsMenu: LocalizedStringResource = "workspace.actions_menu"
+        static let showSingleRepository: LocalizedStringResource = "workspace.show_single_repository"
+        static let chooseRepositoryForActivePane: LocalizedStringResource = "workspace.choose_repository_for_active_pane"
         static let openRepository: LocalizedStringResource = "workspace.open_repository"
         static let missingRepository: LocalizedStringResource = "workspace.missing_repository"
         static let openedOutsideRepository: LocalizedStringResource = "workspace.opened_outside_repository"
