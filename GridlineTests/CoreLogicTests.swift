@@ -1048,6 +1048,46 @@ final class PaneLayoutTests: XCTestCase {
         let roundTrip = try JSONDecoder().decode(PaneLayout.self, from: JSONEncoder().encode(layout))
         XCTAssertEqual(roundTrip, layout)
     }
+
+    func testRemovingActivePaneAndChangingDisplayCountNormalizeModes() {
+        let first = PaneSlot(repoID: UUID())
+        let active = PaneSlot(repoID: UUID())
+        var layout = PaneLayout(slots: [first, active], displayPaneCount: 2)
+        layout.activePaneID = active.id
+        layout.maximizedPaneID = active.id
+        layout.terminalOnlyPaneID = active.id
+
+        XCTAssertTrue(layout.removePane(active.id))
+        XCTAssertEqual(layout.activePaneID, first.id)
+        XCTAssertNil(layout.maximizedPaneID)
+        XCTAssertNil(layout.terminalOnlyPaneID)
+
+        layout.maximizedPaneID = UUID()
+        layout.terminalOnlyPaneID = UUID()
+        layout.setDisplayPaneCount(2)
+        XCTAssertNil(layout.maximizedPaneID)
+        XCTAssertNil(layout.terminalOnlyPaneID)
+        XCTAssertTrue(layout.removePane(layout.slots.last!.id))
+        XCTAssertFalse(layout.removePane(first.id))
+    }
+
+    func testSelectingAndRestoringExistingReposPreservesPaneModes() {
+        let repoA = UUID()
+        let repoB = UUID()
+        let first = PaneSlot(repoID: repoA)
+        let second = PaneSlot()
+        var layout = PaneLayout(slots: [first, second])
+        layout.toggleMaximizedPane(first.id)
+
+        layout.selectRepo(repoB, in: first.id)
+        XCTAssertEqual(layout.maximizedPaneID, layout.activePaneID)
+        XCTAssertEqual(layout.activeSlot.repoID, repoB)
+
+        layout.restoreRepo(repoA, in: UUID())
+        XCTAssertEqual(layout.activeSlot.repoID, repoA)
+        layout.restoreRepo(repoB, in: UUID())
+        XCTAssertEqual(layout.activeSlot.repoID, repoB)
+    }
 }
 
 @MainActor
@@ -1065,6 +1105,40 @@ final class AppStateStoreTests: XCTestCase {
         let repo = emptyStore.addRepo(path: "/tmp/first")
         XCTAssertTrue(FileManager.default.fileExists(atPath: stateURL.path))
         XCTAssertEqual(AppStateStore(fileURL: stateURL).state.savedRepos, [repo])
+    }
+
+    func testDecodeRepairsRecentRepositoryIDsAndUsesLegacyDefaults() throws {
+        let first = Repo(path: "/tmp/first")
+        let second = Repo(path: "/tmp/second")
+        let savedRepos = try JSONEncoder().encode([first, second])
+        let savedReposJSON = String(decoding: savedRepos, as: UTF8.self)
+        let recentIDs = [first.id, first.id, UUID(), second.id]
+            .map { "\"\($0.uuidString)\"" }
+            .joined(separator: ",")
+        let json = "{\"savedRepos\":\(savedReposJSON),\"recentRepoIDs\":[\(recentIDs)]}"
+
+        let state = try JSONDecoder().decode(AppState.self, from: Data(json.utf8))
+
+        XCTAssertEqual(state.formatVersion, 4)
+        XCTAssertEqual(state.recentRepoIDs, [first.id, second.id])
+        XCTAssertEqual(state.paneLayout.slots.count, 2)
+        XCTAssertEqual(state.paneLayout.activeSlot.repoID, nil)
+    }
+
+    func testOpeningKnownRepositoryReplacesRequestedPaneAndIgnoresMissingIDs() throws {
+        let store = AppStateStore(fileURL: try temporaryStateURL())
+        let source = store.addRepo(path: "/tmp/source")
+        let targetPane = store.state.paneLayout.slots[1].id
+        XCTAssertTrue(store.openRepoInNewPane(
+            path: "/tmp/./source",
+            displayName: "Source",
+            replacingPaneID: targetPane
+        ))
+        XCTAssertEqual(store.state.paneLayout.activeSlot.repoID, source.id)
+        let stateBeforeNoop = store.state
+        store.openRepo(id: UUID(), inNewPane: true)
+        XCTAssertEqual(store.state.savedRepos, stateBeforeNoop.savedRepos)
+        XCTAssertEqual(store.state.recentRepoIDs, stateBeforeNoop.recentRepoIDs)
     }
 
     func testRecentRepositoryLimitAndNoopClear() throws {
@@ -1653,6 +1727,114 @@ final class NestedPaneSplitViewTests: XCTestCase {
     private func hostingControllerCount(in root: NSViewController) -> Int {
         (root is NSHostingController<AnyView> ? 1 : 0)
             + root.children.reduce(0) { $0 + hostingControllerCount(in: $1) }
+    }
+}
+
+final class SearchAndBranchSelectionPolicyTests: XCTestCase {
+    func testQuickSwitcherSearchFiltersRepositoriesByNameOrPathCaseInsensitively() {
+        let gridline = Repo(path: "/Users/test/Projects/Gridline")
+        let displayNamed = Repo(path: "/tmp/custom-path", displayName: "Personal Notes")
+        let repos = [gridline, displayNamed]
+
+        XCTAssertEqual(QuickSwitcherSearchPolicy.filteredRepos(repos, query: ""), repos)
+        XCTAssertEqual(QuickSwitcherSearchPolicy.filteredRepos(repos, query: "GRIDLINE"), [gridline])
+        XCTAssertEqual(QuickSwitcherSearchPolicy.filteredRepos(repos, query: "CUSTOM-PATH"), [displayNamed])
+        XCTAssertTrue(QuickSwitcherSearchPolicy.filteredRepos(repos, query: "missing").isEmpty)
+    }
+
+    func testQuickSwitcherSearchFiltersFilesByNamePathOrRepositoryName() {
+        let repoID = UUID()
+        let file = QuickSwitcherFile(repoID: repoID, repoName: "Gridline", path: "/tmp/Notes.md")
+        let files = [file]
+
+        XCTAssertEqual(QuickSwitcherSearchPolicy.filteredFiles(files, query: ""), files)
+        XCTAssertEqual(QuickSwitcherSearchPolicy.filteredFiles(files, query: "notes"), files)
+        XCTAssertEqual(QuickSwitcherSearchPolicy.filteredFiles(files, query: "/TMP"), files)
+        XCTAssertEqual(QuickSwitcherSearchPolicy.filteredFiles(files, query: "GRIDLINE"), files)
+        XCTAssertTrue(QuickSwitcherSearchPolicy.filteredFiles(files, query: "missing").isEmpty)
+    }
+
+    func testBranchPickerInitialSelectionUsesSavedValuesOrFirstDistinctBranches() {
+        XCTAssertEqual(
+            BranchComparisonPickerPolicy.initialSelection(branches: ["main", "feature"], savedBase: nil, savedTarget: nil).base,
+            "main"
+        )
+        XCTAssertEqual(
+            BranchComparisonPickerPolicy.initialSelection(branches: ["main", "feature"], savedBase: nil, savedTarget: nil).target,
+            "feature"
+        )
+        let saved = BranchComparisonPickerPolicy.initialSelection(
+            branches: ["main", "feature"],
+            savedBase: "feature",
+            savedTarget: "main"
+        )
+        XCTAssertEqual(saved.base, "feature")
+        XCTAssertEqual(saved.target, "main")
+        XCTAssertEqual(BranchComparisonPickerPolicy.initialSelection(branches: [], savedBase: nil, savedTarget: nil).base, "")
+    }
+
+    func testBranchPickerRepairsRemovedOrDuplicateSelectionsAndValidatesComparison() {
+        XCTAssertEqual(
+            BranchComparisonPickerPolicy.repairedSelection(branches: [], base: "saved-base", target: "saved-target").base,
+            "saved-base"
+        )
+        let removed = BranchComparisonPickerPolicy.repairedSelection(
+            branches: ["main", "feature"],
+            base: "removed",
+            target: "feature"
+        )
+        XCTAssertEqual(removed.base, "main")
+        XCTAssertEqual(removed.target, "feature")
+
+        let duplicate = BranchComparisonPickerPolicy.repairedSelection(
+            branches: ["main", "feature"],
+            base: "main",
+            target: "main"
+        )
+        XCTAssertEqual(duplicate.base, "main")
+        XCTAssertEqual(duplicate.target, "feature")
+        XCTAssertTrue(BranchComparisonPickerPolicy.canCompare(base: "main", target: "feature"))
+        XCTAssertFalse(BranchComparisonPickerPolicy.canCompare(base: "", target: "feature"))
+        XCTAssertFalse(BranchComparisonPickerPolicy.canCompare(base: "main", target: ""))
+        XCTAssertFalse(BranchComparisonPickerPolicy.canCompare(base: "main", target: "main"))
+    }
+
+    func testPaneCountPolicyAppliesSafeChangesWithoutPrompting() {
+        let layout = PaneLayout(slots: [PaneSlot(repoID: UUID()), PaneSlot(repoID: UUID())], displayPaneCount: 2)
+        var inspectedRepoIDs: [UUID] = []
+
+        let increase = PaneCountChangePolicy.decision(
+            paneCount: 3,
+            layout: layout,
+            visiblePaneSlots: layout.displayedSlots
+        ) { repoID in
+            inspectedRepoIDs.append(repoID)
+            return 1
+        }
+        XCTAssertEqual(increase, .applyImmediately(3))
+        XCTAssertTrue(inspectedRepoIDs.isEmpty)
+
+        let decreaseWithoutCommands = PaneCountChangePolicy.decision(
+            paneCount: 1,
+            layout: layout,
+            visiblePaneSlots: layout.displayedSlots
+        ) { _ in 0 }
+        XCTAssertEqual(decreaseWithoutCommands, .applyImmediately(1))
+    }
+
+    func testPaneCountPolicyCountsCommandsInAllHiddenRepositories() {
+        let repoIDs = (0..<3).map { _ in UUID() }
+        let layout = PaneLayout(slots: repoIDs.map { PaneSlot(repoID: $0) }, displayPaneCount: 3)
+
+        let decision = PaneCountChangePolicy.decision(
+            paneCount: 1,
+            layout: layout,
+            visiblePaneSlots: layout.displayedSlots
+        ) { repoID in
+            repoID == repoIDs[1] ? 2 : (repoID == repoIDs[2] ? 3 : 0)
+        }
+
+        XCTAssertEqual(decision, .confirm(paneCount: 1, activeCommandCount: 5))
     }
 }
 

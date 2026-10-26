@@ -312,35 +312,28 @@ struct ContentView: View {
     }
 
     private func requestPaneCount(_ paneCount: Int, opensQuickSwitcherAfterward: Bool = false) {
-        guard paneCount < layout.displayPaneCount else {
-            appState.setDisplayPaneCount(paneCount)
-            if opensQuickSwitcherAfterward {
-                presentQuickSwitcherAfterCurrentAction()
-            }
-            return
-        }
-
-        var proposedLayout = layout
-        proposedLayout.setDisplayPaneCount(paneCount)
-        let retainedRepoIDs = Set(proposedLayout.displayedSlots.compactMap(\.repoID))
-        let hiddenRepoIDs = Set(visiblePaneSlots.compactMap(\.repoID)).subtracting(retainedRepoIDs)
-        let activeCommandCount = hiddenRepoIDs.reduce(into: 0) { total, repoID in
-            guard let repo = appState.state.savedRepos.first(where: { $0.id == repoID }) else { return }
-            total += sessionStore.existingSession(for: repo)?.activeCommandCount ?? 0
-        }
-
-        guard activeCommandCount > 0 else {
-            appState.setDisplayPaneCount(paneCount)
-            if opensQuickSwitcherAfterward {
-                presentQuickSwitcherAfterCurrentAction()
-            }
-            return
-        }
-        pendingLayoutChange = PendingLayoutChange(
+        let decision = PaneCountChangePolicy.decision(
             paneCount: paneCount,
-            activeCommandCount: activeCommandCount,
-            opensQuickSwitcherAfterward: opensQuickSwitcherAfterward
-        )
+            layout: layout,
+            visiblePaneSlots: visiblePaneSlots
+        ) { repoID in
+            guard let repo = appState.state.savedRepos.first(where: { $0.id == repoID }) else { return 0 }
+            return sessionStore.existingSession(for: repo)?.activeCommandCount ?? 0
+        }
+
+        switch decision {
+        case .applyImmediately(let paneCount):
+            appState.setDisplayPaneCount(paneCount)
+            if opensQuickSwitcherAfterward {
+                presentQuickSwitcherAfterCurrentAction()
+            }
+        case .confirm(let paneCount, let activeCommandCount):
+            pendingLayoutChange = PendingLayoutChange(
+                paneCount: paneCount,
+                activeCommandCount: activeCommandCount,
+                opensQuickSwitcherAfterward: opensQuickSwitcherAfterward
+            )
+        }
     }
 
     private var availablePaneRepos: [Repo] {

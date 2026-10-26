@@ -1,5 +1,34 @@
 import SwiftUI
 
+enum BranchComparisonPickerPolicy {
+    static func canCompare(base: String, target: String) -> Bool {
+        !base.isEmpty && !target.isEmpty && base != target
+    }
+
+    static func initialSelection(
+        branches: [String],
+        savedBase: String?,
+        savedTarget: String?
+    ) -> (base: String, target: String) {
+        let base = savedBase ?? branches.first ?? ""
+        let target = savedTarget ?? branches.first(where: { $0 != base }) ?? ""
+        return (base, target)
+    }
+
+    static func repairedSelection(
+        branches: [String],
+        base: String,
+        target: String
+    ) -> (base: String, target: String) {
+        guard !branches.isEmpty else { return (base, target) }
+        let repairedBase = branches.contains(base) ? base : branches[0]
+        let repairedTarget = branches.contains(target) && target != repairedBase
+            ? target
+            : branches.first(where: { $0 != repairedBase }) ?? ""
+        return (repairedBase, repairedTarget)
+    }
+}
+
 struct BranchComparisonPickerView: View {
     @ObservedObject var store: RepoDiffStore
     @Environment(\.dismiss) private var dismiss
@@ -7,7 +36,7 @@ struct BranchComparisonPickerView: View {
     @State private var targetBranch = ""
 
     private var canCompare: Bool {
-        !baseBranch.isEmpty && !targetBranch.isEmpty && baseBranch != targetBranch
+        BranchComparisonPickerPolicy.canCompare(base: baseBranch, target: targetBranch)
     }
 
     var body: some View {
@@ -67,21 +96,23 @@ struct BranchComparisonPickerView: View {
             // Hanya betulkan pilihan kalau branch yang sedang terpilih sudah tidak ada
             // lagi di daftar baru (misalnya dihapus dari luar) — jangan menimpa pilihan
             // manual pengguna yang masih valid setiap kali daftar branch di-refresh.
-            guard !branches.isEmpty else { return }
-            if !branches.contains(baseBranch) {
-                baseBranch = branches.first ?? ""
-            }
-            if !branches.contains(targetBranch) || targetBranch == baseBranch {
-                targetBranch = branches.first(where: { $0 != baseBranch }) ?? ""
-            }
+            let selection = BranchComparisonPickerPolicy.repairedSelection(
+                branches: branches,
+                base: baseBranch,
+                target: targetBranch
+            )
+            baseBranch = selection.base
+            targetBranch = selection.target
         }
     }
 
     private func selectInitialBranches() {
-        let branches = store.availableComparisonBranches
-        baseBranch = store.comparisonBaseBranch ?? branches.first ?? ""
-        targetBranch = store.comparisonTargetBranch
-            ?? branches.first(where: { $0 != baseBranch })
-            ?? ""
+        let selection = BranchComparisonPickerPolicy.initialSelection(
+            branches: store.availableComparisonBranches,
+            savedBase: store.comparisonBaseBranch,
+            savedTarget: store.comparisonTargetBranch
+        )
+        baseBranch = selection.base
+        targetBranch = selection.target
     }
 }

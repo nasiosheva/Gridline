@@ -14,6 +14,25 @@ struct QuickSwitcherFile: Identifiable, Hashable {
     var name: String { URL(fileURLWithPath: path).lastPathComponent }
 }
 
+enum QuickSwitcherSearchPolicy {
+    static func filteredRepos(_ repos: [Repo], query: String) -> [Repo] {
+        guard !query.isEmpty else { return repos }
+        return repos.filter {
+            $0.name.localizedCaseInsensitiveContains(query)
+                || $0.path.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    static func filteredFiles(_ files: [QuickSwitcherFile], query: String) -> [QuickSwitcherFile] {
+        guard !query.isEmpty else { return files }
+        return files.filter {
+            $0.name.localizedCaseInsensitiveContains(query)
+                || $0.path.localizedCaseInsensitiveContains(query)
+                || $0.repoName.localizedCaseInsensitiveContains(query)
+        }
+    }
+}
+
 struct QuickSwitcherView: View {
     let repos: [Repo]
     let files: [QuickSwitcherFile]
@@ -25,20 +44,11 @@ struct QuickSwitcherView: View {
     @State private var query = ""
 
     private var filteredRepos: [Repo] {
-        guard !query.isEmpty else { return repos }
-        return repos.filter {
-            $0.name.localizedCaseInsensitiveContains(query)
-                || $0.path.localizedCaseInsensitiveContains(query)
-        }
+        QuickSwitcherSearchPolicy.filteredRepos(repos, query: query)
     }
 
     private var filteredFiles: [QuickSwitcherFile] {
-        guard !query.isEmpty else { return files }
-        return files.filter {
-            $0.name.localizedCaseInsensitiveContains(query)
-                || $0.path.localizedCaseInsensitiveContains(query)
-                || $0.repoName.localizedCaseInsensitiveContains(query)
-        }
+        QuickSwitcherSearchPolicy.filteredFiles(files, query: query)
     }
 
     var body: some View {

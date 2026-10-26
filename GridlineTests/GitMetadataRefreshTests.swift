@@ -393,6 +393,91 @@ final class RepoDiffStoreTests: XCTestCase {
         try await waitUntil { store.hasLoadedInitialStatus }
     }
 
+    func testIgnoredEntriesAndVisibilityFiltersUpdate() async throws {
+        let repository = try TemporaryGitRepository()
+        try Data("ignored/\n".utf8).write(to: repository.url.appendingPathComponent(".gitignore"))
+        let ignoredDirectory = repository.url.appendingPathComponent("ignored", isDirectory: true)
+        try FileManager.default.createDirectory(at: ignoredDirectory, withIntermediateDirectories: true)
+        try Data("ignored\n".utf8).write(to: ignoredDirectory.appendingPathComponent("file.txt"))
+        try Data("untracked\n".utf8).write(to: repository.url.appendingPathComponent("new.txt"))
+
+        let store = RepoDiffStore(repoPath: repository.url.path)
+        store.showIgnoredFiles = true
+        try await waitUntil { store.ignored.contains { $0.path == "ignored/" } }
+        XCTAssertEqual(store.ignored.first?.group, .ignored)
+
+        store.hideUntrackedFiles = true
+        XCTAssertFalse(store.visibleEntries.contains { $0.group == .untracked })
+        XCTAssertTrue(store.visibleEntries.contains { $0.group == .ignored })
+
+        store.showIgnoredFiles = false
+        XCTAssertTrue(store.ignored.isEmpty)
+    }
+
+    func testSwapComparisonBranchesSupportsBothSelectionModes() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("branch", "comparison")
+        try repository.advanceBranch("comparison", fileContents: "comparison\n")
+        let store = RepoDiffStore(repoPath: repository.url.path)
+        await store.refresh()
+
+        store.selectComparisonBranch("comparison")
+        try await waitUntil { !store.isLoadingComparison }
+        store.swapComparisonBranches()
+        try await waitUntil { store.isComparingBranches && !store.isLoadingComparison }
+        XCTAssertEqual(store.comparisonBaseBranch, "main")
+        XCTAssertEqual(store.comparisonTargetBranch, "comparison")
+
+        store.swapComparisonBranches()
+        try await waitUntil { store.comparisonBaseBranch == "comparison" && !store.isLoadingComparison }
+        XCTAssertEqual(store.comparisonTargetBranch, "main")
+
+        store.selectComparisonBranch(nil)
+        try await waitUntil { !store.isComparingBranches }
+        store.swapComparisonBranches()
+        XCTAssertFalse(store.isComparingBranches)
+    }
+
+    func testPullFromUpstreamRequiresLoadedBehindBranchAndRefreshesAfterPull() async throws {
+        let repository = try TemporaryGitRepository()
+        let store = RepoDiffStore(repoPath: repository.url.path)
+
+        let beforeRefreshPull = await store.pullFromUpstream()
+        XCTAssertNil(beforeRefreshPull)
+        await store.refresh()
+        let withoutUpstream = await store.pullFromUpstream()
+        XCTAssertNil(withoutUpstream)
+
+        try configureAdvancedUpstream(for: repository)
+        try repository.git("fetch", "origin")
+        await store.refresh()
+        XCTAssertEqual(store.headerStatus?.behind, 1)
+
+        let result = await store.pullFromUpstream()
+        XCTAssertEqual(result, .succeeded)
+        XCTAssertEqual(store.headerStatus?.behind, 0)
+        XCTAssertEqual(
+            try String(contentsOf: repository.url.appendingPathComponent("tracked.txt"), encoding: .utf8),
+            "upstream change\n"
+        )
+        XCTAssertFalse(store.isPulling)
+    }
+
+    private func configureAdvancedUpstream(for repository: TemporaryGitRepository) throws {
+        let remote = repository.url.appendingPathComponent("remote.git")
+        try repository.git("init", "--bare", remote.path)
+        try repository.git("remote", "add", "origin", remote.path)
+        try repository.git("push", "--set-upstream", "origin", "main")
+
+        let updater = try TemporaryGitRepository()
+        try updater.git("remote", "add", "origin", remote.path)
+        try updater.git("fetch", "origin")
+        try updater.git("reset", "--hard", "origin/main")
+        try Data("upstream change\n".utf8).write(to: updater.url.appendingPathComponent("tracked.txt"))
+        try updater.git("commit", "--quiet", "-am", "upstream change")
+        try updater.git("push", "origin", "main")
+    }
+
     private func waitUntil(
         timeout: Duration = .seconds(5),
         condition: @MainActor () -> Bool
@@ -545,6 +630,38 @@ final class GitDiffServiceTests: XCTestCase {
         let diff = await GitDiffService.fileDiff(at: repository.url.path, from: "main", to: "comparison", for: entry)
         XCTAssertTrue(diff.rawText.contains("comparison"))
         XCTAssertFalse(diff.hunks.isEmpty)
+    }
+
+    func testStatusSnapshotHandlesIgnoredConflictedAndSymbolicLinkPaths() async throws {
+        let repository = try TemporaryGitRepository()
+        try Data("ignored/\n".utf8).write(to: repository.url.appendingPathComponent(".gitignore"))
+        let ignoredDirectory = repository.url.appendingPathComponent("ignored", isDirectory: true)
+        try FileManager.default.createDirectory(at: ignoredDirectory, withIntermediateDirectories: true)
+        try Data("ignored\n".utf8).write(to: ignoredDirectory.appendingPathComponent("file.txt"))
+
+        try repository.git("switch", "-c", "conflict")
+        try Data("conflict branch\n".utf8).write(to: repository.url.appendingPathComponent("tracked.txt"))
+        try repository.git("commit", "--quiet", "-am", "conflict branch")
+        try repository.git("switch", "main")
+        try Data("main branch\n".utf8).write(to: repository.url.appendingPathComponent("tracked.txt"))
+        try repository.git("commit", "--quiet", "-am", "main branch")
+        XCTAssertThrowsError(try repository.git("merge", "conflict"))
+
+        let linkPath = repository.url.appendingPathComponent("linked.txt")
+        try FileManager.default.createSymbolicLink(atPath: linkPath.path, withDestinationPath: "target")
+        let untrackedDirectory = repository.url.appendingPathComponent("untracked-directory", isDirectory: true)
+        try FileManager.default.createDirectory(at: untrackedDirectory, withIntermediateDirectories: true)
+        try Data("child\n".utf8).write(to: untrackedDirectory.appendingPathComponent("child.txt"))
+
+        let snapshot = await GitDiffService.statusSnapshot(at: repository.url.path, includeIgnored: true)
+        XCTAssertTrue(snapshot.entries.contains { $0.group == .ignored && $0.path == "ignored/" })
+        XCTAssertEqual(snapshot.entries.filter { $0.status == .unmerged }.map(\.group), [.staged, .unstaged])
+        let link = try XCTUnwrap(snapshot.entries.first { $0.path == "linked.txt" })
+        XCTAssertEqual(link.additions, 1)
+        XCTAssertEqual(link.deletions, 0)
+        let directory = try XCTUnwrap(snapshot.entries.first { $0.path == "untracked-directory/" })
+        XCTAssertNil(directory.additions)
+        XCTAssertNil(directory.deletions)
     }
 }
 
