@@ -12,7 +12,6 @@ struct RepoPaneHeaderView: View {
     let availableRepos: [Repo]
     @ObservedObject var diffStore: RepoDiffStore
     let attention: RepoAttentionStatus?
-    let workStatus: RepoWorkStatus
     let isMaximized: Bool
     let isTerminalOnly: Bool
     var onSelectRepo: (UUID) -> Void
@@ -83,11 +82,6 @@ struct RepoPaneHeaderView: View {
             .tint(RepoIdentityColor.color(for: repo))
             .help(L10n.Pane.selectRepository)
             .accessibilityLabel(L10n.Pane.selectRepository)
-
-            Label(workStatus.title, systemImage: workStatus.systemImage)
-                .font(.caption)
-                .foregroundStyle(workStatus == .needsAttention ? .red : .secondary)
-                .help(L10n.Repository.workStatusHelp)
 
             if !diffStore.hasLoadedInitialStatus || (diffStore.isRefreshing && !diffStore.isPulling) {
                 StatusSpinnerLabel(text: L10n.Worktree.openingBranch)
@@ -265,7 +259,7 @@ struct RepoPaneHeaderView: View {
             .accessibilityLabel(L10n.Pane.openInTerminal)
 
             Button(action: onToggleTerminalOnly) {
-                Image(systemName: isTerminalOnly ? "rectangle.bottomhalf.inset.filled" : "rectangle.bottomhalf.inset")
+                Image(systemName: isTerminalOnly ? "rectangle.bottomhalf.inset.filled" : "rectangle.split.2x1")
                     .frame(width: 16, height: 16)
                     .contentShape(Rectangle())
             }

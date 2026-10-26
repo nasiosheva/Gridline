@@ -44,7 +44,6 @@ struct RepoPaneView: View {
                 availableRepos: availableRepos,
                 diffStore: diffStore,
                 attention: session.attention,
-                workStatus: session.workStatus,
                 isMaximized: isMaximized,
                 isTerminalOnly: isTerminalOnly,
                 onSelectRepo: onSelectRepo,

@@ -26,28 +26,6 @@ enum RepoAttentionStatus: Equatable {
     }
 }
 
-enum RepoWorkStatus: Equatable {
-    case idle
-    case running(Int)
-    case needsAttention
-
-    var title: String {
-        switch self {
-        case .idle: String(localized: L10n.Repository.workStatusIdle)
-        case .running(let count): L10n.format(L10n.Repository.workStatusRunning, Int64(count))
-        case .needsAttention: String(localized: L10n.Repository.workStatusAttention)
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .idle: "circle"
-        case .running: "terminal"
-        case .needsAttention: "exclamationmark.circle.fill"
-        }
-    }
-}
-
 @MainActor
 final class RepoSession: ObservableObject {
     let repoPath: String
@@ -63,16 +41,6 @@ final class RepoSession: ObservableObject {
 
     var activeCommandCount: Int {
         tabs.filter(\.hasActiveCommand).count
-    }
-
-    var workStatus: RepoWorkStatus {
-        Self.workStatus(attention: attention, runningProcessCount: runningProcessCount)
-    }
-
-    static func workStatus(attention: RepoAttentionStatus?, runningProcessCount: Int) -> RepoWorkStatus {
-        if attention == .failed { return .needsAttention }
-        if runningProcessCount > 0 { return .running(runningProcessCount) }
-        return .idle
     }
 
     /// Diatur oleh `RepoPaneView` untuk membuka hasil Cmd+klik dari terminal

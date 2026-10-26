@@ -460,10 +460,6 @@ final class ProcessAndSessionTests: XCTestCase {
         XCTAssertEqual(session.repoPath, directory.url.path)
         XCTAssertEqual(session.runningProcessCount, session.tabs.filter(\.isRunning).count)
         XCTAssertEqual(session.activeCommandCount, session.tabs.filter(\.hasActiveCommand).count)
-        XCTAssertEqual(session.workStatus, RepoSession.workStatus(
-            attention: session.attention,
-            runningProcessCount: session.runningProcessCount
-        ))
 
         var openedPath = false
         session.openFileHandler = { target in
@@ -688,25 +684,12 @@ final class DiagnosticAndTerminalTests: XCTestCase {
         XCTAssertEqual(target, .file(path: expectedFile.path, line: 4, isOutsideRepo: false))
     }
 
-    func testRepoWorkStatusTitlesAndIcons() {
-        XCTAssertEqual(RepoWorkStatus.idle.systemImage, "circle")
-        XCTAssertEqual(RepoWorkStatus.running(2).systemImage, "terminal")
-        XCTAssertEqual(RepoWorkStatus.needsAttention.systemImage, "exclamationmark.circle.fill")
-        XCTAssertEqual(RepoWorkStatus.idle.title, String(localized: L10n.Repository.workStatusIdle))
-        XCTAssertEqual(RepoWorkStatus.running(2).title, L10n.format(L10n.Repository.workStatusRunning, Int64(2)))
-        XCTAssertEqual(RepoWorkStatus.needsAttention.title, String(localized: L10n.Repository.workStatusAttention))
-    }
-
-    func testRepoAttentionAndWorkStatusMappings() {
+    func testRepoAttentionMappings() {
         XCTAssertEqual(RepoAttentionStatus.forExitCode(0), .completed)
         XCTAssertEqual(RepoAttentionStatus.forExitCode(1), .failed)
         XCTAssertEqual(RepoAttentionStatus.forExitCode(nil), .failed)
         XCTAssertEqual(RepoAttentionStatus.completed.accessibilityLabel, String(localized: L10n.Repository.attentionCompleted))
         XCTAssertEqual(RepoAttentionStatus.failed.accessibilityLabel, String(localized: L10n.Repository.attentionFailed))
-
-        XCTAssertEqual(RepoSession.workStatus(attention: nil, runningProcessCount: 0), .idle)
-        XCTAssertEqual(RepoSession.workStatus(attention: .completed, runningProcessCount: 2), .running(2))
-        XCTAssertEqual(RepoSession.workStatus(attention: .failed, runningProcessCount: 2), .needsAttention)
     }
 
     func testNotificationContentUsesRepositoryTabAndExitStatus() {
@@ -1636,7 +1619,6 @@ final class ZeroCoverageViewTests: XCTestCase {
             availableRepos: [repository],
             diffStore: diffStore,
             attention: .completed,
-            workStatus: .needsAttention,
             isMaximized: false,
             isTerminalOnly: false,
             onSelectRepo: { _ in },
