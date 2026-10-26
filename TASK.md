@@ -193,6 +193,16 @@ xcodebuild -project Gridline.xcodeproj -scheme Gridline -configuration Debug -sk
 - Coverage belum mencapai 100%. File app dengan coverage terendah kini `WorktreeBranchPickerView`, `ContentView`, dan `NestedPaneSplitView`; logic yang perlu dilanjutkan termasuk `RepoOpener`, `LocalNotificationService`, dan `TCCPermission`.
 - `xcodebuild test` CLI dicoba tetapi berhenti sebelum kompilasi karena sandbox menolak penulisan cache SwiftPM/Clang di luar workspace. Run Xcode GUI berhasil.
 
+### Fokus file coverage rendah: Worktree branch picker (2026-10-26)
+
+- [x] Pindahkan state, filter branch, pemuatan daftar, aksi buka worktree, dan pemetaan error dari `WorktreeBranchPickerView` ke `WorktreeBranchPickerModel` supaya aturan alur dapat diuji tanpa inspeksi kontrol SwiftUI/AppKit.
+- [x] Tambahkan tes untuk memuat/filter branch, membuka worktree yang sudah ada, kegagalan repo/operasi, pane pengganti yang tidak tersedia, pemetaan pesan error, serta hosted view untuk state loading/kosong/tidak ada hasil.
+- [~] Laporan Xcode GUI `Test-Gridline-2026.10.26_13-51-04-+0700.xcresult`: 106 tes ditemukan, 105 sukses, 1 gagal. Semua tes `WorktreeBranchPickerModelTests` sukses; `ZeroCoverageViewTests.testFileViewerContentBodyCoversEveryLoadState()` gagal dengan pesan runner keluar sebelum rangkaian selesai.
+- [x] Coverage target `Gridline.app`: 8.720/11.380 (76,63%); `WorktreeBranchPickerView.swift`: 373/408 (91,42%). Metode model 100% kecuali `open(...)` 26/27 (96,3%).
+- [ ] Ulangi suite setelah menelusuri kegagalan runner pada `testFileViewerContentBodyCoversEveryLoadState()`; setelah itu lanjut ke `ContentView`, `FileViewerContentView`, dan `NestedPaneSplitView`.
+- `xcodebuild` CLI tetap terhalang penulisan `swiftterm.dia` di cache manifest SwiftPM pengguna meski cache build diarahkan ke `/private/tmp`; hasil coverage di atas berasal dari Xcode GUI.
+- [~] Tambahkan `NestedPaneSplitViewTests` untuk susunan grid 2×2, pembaruan konten pane tanpa rebuild, perubahan pane terlihat, laporan fraksi divider, dan penghentian observer. Kedua tes baru lolos type-check mandiri terhadap modul Debug yang tersedia; eksekusi XCTest serta coverage barunya masih pending.
+
 
 ## Lokalisasi (permintaan tambahan 2026-10-24)
 

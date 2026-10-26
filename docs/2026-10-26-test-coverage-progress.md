@@ -22,3 +22,21 @@ Persentase app mencakup seluruh source Swift app, termasuk view SwiftUI/AppKit. 
 File app dengan coverage terendah setelah hosted-view batch ini adalah `WorktreeBranchPickerView.swift` (32,4%), `ContentView.swift` (41,7%), dan `NestedPaneSplitView.swift` (57,8%). Ini masih perlu tes UI/runtime untuk menaikkan app-wide coverage.
 
 Angka coverage app bervariasi antar-run GUI karena jalur view/runtime yang ikut berjalan; gunakan hitungan baris dan cakupan yang sama saat membandingkan. `xcodebuild test` CLI dicoba, tetapi berhenti sebelum kompilasi saat sandbox menolak penulisan cache manifest SwiftPM dan module cache Clang di luar workspace. Hasil 101/101 berasal dari Xcode GUI. Coverage 100% app-wide belum tercapai; pekerjaan berikutnya tetap menutup file coverage terendah lalu memperluas pengujian UI/runtime.
+
+## Lanjutan: Worktree branch picker (2026-10-26)
+
+`WorktreeBranchPickerView` kini memakai `WorktreeBranchPickerModel` untuk state daftar/carian, pemuatan branch, pembukaan worktree, dan pemetaan error. Tes model menggunakan repositori Git dan worktree sementara. Tes model dan hosted-view baru lulus pada laporan terbaru.
+
+Laporan Xcode GUI `Test-Gridline-2026.10.26_13-51-04-+0700.xcresult` mencatat 106 tes, **105 sukses dan 1 gagal**. Kegagalan yang tercatat adalah `ZeroCoverageViewTests.testFileViewerContentBodyCoversEveryLoadState()`, dengan pesan test runner keluar sebelum rangkaian selesai. Karena itu run ini bukan suite hijau dan perlu diulang setelah menelusuri kegagalan tersebut.
+
+Coverage dalam target app pada run itu:
+
+- `Gridline.app`: **8.720 / 11.380 baris (76,63%)**.
+- `WorktreeBranchPickerView.swift`: **373 / 408 (91,42%)**; seluruh metode model tercakup, kecuali `open(...)` yang 26/27 (96,3%).
+- File terendah berikutnya: `ContentView.swift` **541 / 1.272 (42,53%)**, `FileViewerContentView.swift` **97 / 170 (57,06%)**, dan `NestedPaneSplitView.swift` **148 / 256 (57,81%)**.
+
+Percobaan CLI dengan DerivedData dan package cache diarahkan ke `/private/tmp` tetap berhenti saat SwiftPM mencoba menulis `swiftterm.dia` ke `~/Library/Caches/org.swift.swiftpm/manifests/ManifestLoading` dan ditolak sandbox. Angka di atas berasal dari laporan GUI, bukan dari run CLI tersebut. Coverage app-wide 100% belum tercapai.
+
+## Tes split-grid berikutnya
+
+Dua tes `NestedPaneSplitViewTests` ditambahkan untuk membangun grid 2×2, menjaga controller pane saat konten diperbarui, membentuk ulang grid saat pane disembunyikan/dimunculkan, melaporkan fraksi divider, dan melepas observer. File `CoreLogicTests.swift` dan `GitMetadataRefreshTests.swift` lolos `swiftc -typecheck` terhadap modul Debug yang tersedia. Tes baru belum dijalankan oleh XCTest; angka coverage 76,63% di atas tidak memasukkan cakupan dari tes ini.
