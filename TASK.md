@@ -185,6 +185,14 @@ xcodebuild -project Gridline.xcodeproj -scheme Gridline -configuration Debug -sk
 - Probe Swift mandiri pada `GitMetadataWatcher` lolos untuk ketiga perubahan index/ref; ini tidak memverifikasi target XCTest atau pembaruan UI.
 - Verifikasi CLI sebelumnya terhenti sebelum kompilasi karena sandbox tidak mengizinkan SwiftPM menulis diagnostik manifest ke cache pengguna dan jaringan tidak dapat mengakses GitHub. Run Xcode GUI berhasil.
 
+## Lanjutan coverage test (2026-10-26)
+
+- [x] Tambahkan tiga test `GitPullService`: fast-forward dari bare remote lokal, upstream yang belum dikonfigurasi, dan branch divergen yang harus ditolak tanpa mengubah working file.
+- [x] Tambahkan tes `WordDiffPolicy`, `DiffLinePairingPolicy`, serta hosted-view untuk `ReadOnlyTextView`, gutter nomor baris, Settings, toast, dan `PDFKitView`.
+- [x] Run penuh scheme `Gridline` lewat Xcode GUI: 101 tes lulus, 0 gagal. Hasil terukur: `Gridline.app` 8.453/11.342 (74,53%), `Models` + `Support` 2.575/2.819 (91,34%), `GitPullService.swift` 12/12 (100%), `DiffLinePairingPolicy.swift` 31/31 (100%), dan `PDFKitView.swift` 14/14 (100%). Rincian serta batas pengukuran dicatat di `docs/2026-10-26-test-coverage-progress.md`.
+- Coverage belum mencapai 100%. File app dengan coverage terendah kini `WorktreeBranchPickerView`, `ContentView`, dan `NestedPaneSplitView`; logic yang perlu dilanjutkan termasuk `RepoOpener`, `LocalNotificationService`, dan `TCCPermission`.
+- `xcodebuild test` CLI dicoba tetapi berhenti sebelum kompilasi karena sandbox menolak penulisan cache SwiftPM/Clang di luar workspace. Run Xcode GUI berhasil.
+
 
 ## Lokalisasi (permintaan tambahan 2026-10-24)
 
