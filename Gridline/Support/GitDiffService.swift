@@ -20,7 +20,7 @@ enum GitDiffService {
     nonisolated private static let untrackedReadChunkSize = 64 * 1024
     nonisolated private static let binaryDetectionPrefixLength = 8_000
 
-    static func comparisonBranches(at path: String) async -> [String] {
+    nonisolated static func comparisonBranches(at path: String) async -> [String] {
         let branches = await GitProcess.run(
             ["--no-optional-locks", "branch", "--format=%(refname:short)"],
             at: path
@@ -33,11 +33,11 @@ enum GitDiffService {
             .sorted()
     }
 
-    static func comparisonEntries(at path: String, against branch: String) async -> [DiffFileEntry] {
+    nonisolated static func comparisonEntries(at path: String, against branch: String) async -> [DiffFileEntry] {
         await comparisonEntries(at: path, revisions: [branch], readWorkingTreeMetadata: true)
     }
 
-    static func comparisonEntries(at path: String, from baseBranch: String, to targetBranch: String) async -> [DiffFileEntry] {
+    nonisolated static func comparisonEntries(at path: String, from baseBranch: String, to targetBranch: String) async -> [DiffFileEntry] {
         await comparisonEntries(
             at: path,
             revisions: ["\(baseBranch)...\(targetBranch)"],
@@ -45,7 +45,7 @@ enum GitDiffService {
         )
     }
 
-    private static func comparisonEntries(at path: String, revisions: [String], readWorkingTreeMetadata: Bool) async -> [DiffFileEntry] {
+    nonisolated private static func comparisonEntries(at path: String, revisions: [String], readWorkingTreeMetadata: Bool) async -> [DiffFileEntry] {
         async let statusOutput = GitProcess.run(
             ["--no-optional-locks", "diff", "--no-ext-diff", "--name-status", "-z"] + revisions + ["--"],
             at: path
@@ -288,7 +288,7 @@ enum GitDiffService {
         return parseNumstat(output.stdout)
     }
 
-    private static func parseNumstat(_ output: String) -> [String: LineCounts] {
+    nonisolated private static func parseNumstat(_ output: String) -> [String: LineCounts] {
         var result: [String: LineCounts] = [:]
         let records = output.split(separator: "\0", omittingEmptySubsequences: false)
         var index = 0
@@ -366,7 +366,7 @@ enum GitDiffService {
 
     // MARK: - Isi diff per file
 
-    static func fileDiff(at repoPath: String, for entry: DiffFileEntry) async -> FileDiff {
+    nonisolated static func fileDiff(at repoPath: String, for entry: DiffFileEntry) async -> FileDiff {
         // Direktori yang seluruhnya diabaikan dilaporkan git sebagai satu entri
         // dengan "/" di akhir (mode "traditional", lihat `statusSnapshot`) —
         // `git diff --no-index` tidak bisa membandingkan direktori, jadi tidak
@@ -392,7 +392,7 @@ enum GitDiffService {
         return FileDiff(entry: entry, hunks: parseUnifiedDiff(output.stdout), isBinary: false, rawText: output.stdout)
     }
 
-    static func fileDiff(at repoPath: String, against branch: String, for entry: DiffFileEntry) async -> FileDiff {
+    nonisolated static func fileDiff(at repoPath: String, against branch: String, for entry: DiffFileEntry) async -> FileDiff {
         let output = await GitProcess.run(
             ["--no-optional-locks", "diff", "--no-ext-diff", branch, "--", entry.path],
             at: repoPath
@@ -400,7 +400,7 @@ enum GitDiffService {
         return fileDiff(output: output, entry: entry)
     }
 
-    static func fileDiff(at repoPath: String, from baseBranch: String, to targetBranch: String, for entry: DiffFileEntry) async -> FileDiff {
+    nonisolated static func fileDiff(at repoPath: String, from baseBranch: String, to targetBranch: String, for entry: DiffFileEntry) async -> FileDiff {
         let output = await GitProcess.run(
             ["--no-optional-locks", "diff", "--no-ext-diff", "\(baseBranch)...\(targetBranch)", "--", entry.path],
             at: repoPath
@@ -408,7 +408,7 @@ enum GitDiffService {
         return fileDiff(output: output, entry: entry)
     }
 
-    private static func fileDiff(output: GitProcess.Output, entry: DiffFileEntry) -> FileDiff {
+    nonisolated private static func fileDiff(output: GitProcess.Output, entry: DiffFileEntry) -> FileDiff {
         if output.stdout.contains("Binary files") {
             return FileDiff(entry: entry, hunks: [], isBinary: true, rawText: output.stdout)
         }
@@ -437,7 +437,7 @@ enum GitDiffService {
         "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
-    private static func parseUnifiedDiff(_ text: String) -> [DiffHunk] {
+    nonisolated private static func parseUnifiedDiff(_ text: String) -> [DiffHunk] {
         var hunks: [DiffHunk] = []
         var currentHeader: String?
         var currentLines: [DiffLine] = []
@@ -482,7 +482,7 @@ enum GitDiffService {
         return hunks
     }
 
-    private static func parseHunkHeader(_ header: String) -> (old: Int, new: Int) {
+    nonisolated private static func parseHunkHeader(_ header: String) -> (old: Int, new: Int) {
         // Format: "@@ -<oldStart>[,<oldCount>] +<newStart>[,<newCount>] @@ ..."
         let scanner = Scanner(string: header)
         _ = scanner.scanUpToString("-")

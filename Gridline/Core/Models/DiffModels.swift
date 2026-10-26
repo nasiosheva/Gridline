@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum DiffChangeGroup: String, CaseIterable, Identifiable {
+enum DiffChangeGroup: String, CaseIterable, Identifiable, Sendable {
     case staged
     case unstaged
     case untracked
@@ -19,7 +19,7 @@ enum DiffChangeGroup: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-enum DiffFileStatus: Equatable {
+enum DiffFileStatus: Equatable, Sendable {
     case added
     case deleted
     case modified
@@ -45,7 +45,7 @@ enum DiffFileStatus: Equatable {
     }
 }
 
-struct DiffFileEntry: Identifiable, Equatable {
+struct DiffFileEntry: Identifiable, Equatable, Sendable {
     var id: String { "\(group.rawValue):\(path)" }
     let path: String
     let group: DiffChangeGroup
@@ -60,8 +60,8 @@ struct DiffFileEntry: Identifiable, Equatable {
     }
 }
 
-struct DiffLine: Identifiable {
-    enum Kind {
+struct DiffLine: Identifiable, Sendable {
+    enum Kind: Sendable {
         case context
         case addition
         case deletion
@@ -74,13 +74,13 @@ struct DiffLine: Identifiable {
     let text: String
 }
 
-struct DiffHunk: Identifiable {
+struct DiffHunk: Identifiable, Sendable {
     let id = UUID()
     let header: String
     let lines: [DiffLine]
 }
 
-struct FileDiff {
+struct FileDiff: Sendable {
     let entry: DiffFileEntry
     let hunks: [DiffHunk]
     let isBinary: Bool

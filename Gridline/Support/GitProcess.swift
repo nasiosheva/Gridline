@@ -11,7 +11,7 @@
 import Foundation
 
 enum GitProcess {
-    struct Output {
+    struct Output: Sendable {
         let exitCode: Int32
         let stdout: String
         let stderr: String

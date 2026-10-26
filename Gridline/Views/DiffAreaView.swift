@@ -563,7 +563,7 @@ private struct DiffFileListView: View {
     }
 
     private var emptyListMessage: String {
-        if store.isRefreshing { return String(localized: L10n.Diff.loading) }
+        if store.isRefreshing || store.isLoadingComparison { return String(localized: L10n.Diff.loading) }
         if store.displayedEntries.isEmpty {
             let isComparison = store.comparisonBranch != nil || store.isComparingBranches
             return String(localized: isComparison ? L10n.Diff.noBranchDifferences : L10n.Diff.noChanges)
@@ -955,6 +955,9 @@ private struct DiffContentView: View {
                 } else {
                     hunkScrollView(diff: diff)
                 }
+            } else if store.isLoadingComparison {
+                ProgressView(String(localized: L10n.Diff.loading))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Text(L10n.Diff.selectFile)
                     .foregroundStyle(.secondary)

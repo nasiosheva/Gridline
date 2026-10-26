@@ -29,6 +29,7 @@ final class RepoDiffStore: ObservableObject {
     @Published var selectedFileID: DiffFileEntry.ID?
     @Published private(set) var selectedDiff: FileDiff?
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isLoadingComparison = false
     @Published private(set) var isPulling = false
     @Published private(set) var isGitAvailable = GitProcess.isGitAvailable
     @Published var isFocusMode = false
@@ -153,6 +154,7 @@ final class RepoDiffStore: ObservableObject {
     /// semua pemanggil menunggu task yang sama sampai benar-benar selesai,
     /// termasuk iterasi tambahan yang dipicu oleh permintaan mereka sendiri.
     private var activeRefreshTask: Task<Void, Never>?
+    private var comparisonLoadToken = UUID()
 
     func refresh() async {
         guard isGitAvailable else { return }
@@ -295,20 +297,25 @@ final class RepoDiffStore: ObservableObject {
             if branch == nil { onComparisonSelectionChanged?(.localChanges) }
             return
         }
+        let loadToken = UUID()
+        comparisonLoadToken = loadToken
         diffLoadToken = UUID()
         comparisonBranch = branch
         comparisonBaseBranch = nil
         comparisonTargetBranch = nil
+        isLoadingComparison = branch != nil
         onComparisonSelectionChanged?(branch.map(DiffComparisonSelection.againstBranch) ?? .localChanges)
         selectedFileID = nil
         selectedDiff = nil
         guard let branch else {
+            isLoadingComparison = false
             comparisonEntries = []
             selectedFileID = allEntries.first?.id
             Task { await loadDiffForSelection() }
             return
         }
-        Task { await loadComparisonEntries(against: branch) }
+        comparisonEntries = []
+        Task { await loadComparisonEntries(against: branch, token: loadToken) }
     }
 
     func selectComparisonBranches(from baseBranch: String, to targetBranch: String) {
@@ -319,15 +326,18 @@ final class RepoDiffStore: ObservableObject {
             initialComparisonBranch = nil
             onInitialComparisonBranchConsumed?()
         }
+        let loadToken = UUID()
+        comparisonLoadToken = loadToken
         diffLoadToken = UUID()
         comparisonBranch = nil
         comparisonBaseBranch = baseBranch
         comparisonTargetBranch = targetBranch
+        isLoadingComparison = true
         onComparisonSelectionChanged?(.betweenBranches(base: baseBranch, target: targetBranch))
         selectedFileID = nil
         selectedDiff = nil
         comparisonEntries = []
-        Task { await loadComparisonEntries(from: baseBranch, to: targetBranch) }
+        Task { await loadComparisonEntries(from: baseBranch, to: targetBranch, token: loadToken) }
     }
 
     func swapComparisonBranches() {
@@ -340,17 +350,27 @@ final class RepoDiffStore: ObservableObject {
         }
     }
 
-    private func loadComparisonEntries(against branch: String) async {
+    private func loadComparisonEntries(against branch: String, token: UUID) async {
+        defer {
+            if comparisonLoadToken == token { isLoadingComparison = false }
+        }
         let entries = await GitDiffService.comparisonEntries(at: repoPath, against: branch)
-        guard comparisonBranch == branch, !isComparingBranches else { return }
+        guard comparisonLoadToken == token,
+              comparisonBranch == branch,
+              !isComparingBranches else { return }
         comparisonEntries = entries
         selectedFileID = entries.first?.id
         await loadDiffForSelection()
     }
 
-    private func loadComparisonEntries(from baseBranch: String, to targetBranch: String) async {
+    private func loadComparisonEntries(from baseBranch: String, to targetBranch: String, token: UUID) async {
+        defer {
+            if comparisonLoadToken == token { isLoadingComparison = false }
+        }
         let entries = await GitDiffService.comparisonEntries(at: repoPath, from: baseBranch, to: targetBranch)
-        guard comparisonBaseBranch == baseBranch, comparisonTargetBranch == targetBranch else { return }
+        guard comparisonLoadToken == token,
+              comparisonBaseBranch == baseBranch,
+              comparisonTargetBranch == targetBranch else { return }
         comparisonEntries = entries
         selectedFileID = entries.first?.id
         await loadDiffForSelection()
