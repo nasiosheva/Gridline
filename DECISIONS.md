@@ -146,3 +146,9 @@ Alasan: menyembunyikan baris tetapi membiarkan preview file tersembunyi membuat 
 **D42. Pull upstream tersedia dari indikator behind dan hanya melakukan fast-forward.**
 Pengguna mengonfirmasi branch/upstream sebelum Gridline menjalankan `git pull --ff-only`. UI menampilkan progres dan hasil, lalu memuat ulang status. Jika branch bercabang, perubahan lokal menghalangi update, atau operasi Git gagal, pull berhenti tanpa membuat merge otomatis atau membuang perubahan. Angka behind pada konfirmasi dapat tertinggal karena status tidak melakukan fetch otomatis.
 Alasan: update branch dari header mengurangi langkah pengguna, sementara fast-forward-only mencegah merge commit atau resolusi konflik yang tak terduga.
+
+## 2026-10-26 (v0.19)
+
+**D43. Orientasi pembagi dalam pane (atas-bawah vs kiri-kanan) mengikuti bentuk pane, dengan histeresis.**
+`PaneOrientationPolicy` (Core/Policies) memilih orientasi horizontal (diff/viewer kiri, terminal kanan) saat rasio lebar:tinggi area konten pane ≥ 1.6, dan kembali ke vertikal (diff/viewer atas, terminal bawah — default lama) saat rasio ≤ 1.3; di antara kedua ambang itu orientasi yang sedang aktif dipertahankan supaya tidak bolak-balik saat window di-resize perlahan. Posisi pembagi horizontal disimpan terpisah (`PaneSlot.sideFraction`) dari posisi pembagi vertikal (`PaneSlot.topFraction`) — keduanya dipakai bergantian, bukan saling menimpa.
+Alasan: window Gridline yang di-tile ke atas/bawah lewat menu Window macOS menghasilkan pane yang lebar tapi pendek; split atas-bawah pada bentuk itu memboroskan lebar dan memepet tinggi diff maupun terminal. Bereaksi terhadap bentuk pane itu sendiri (bukan mendeteksi aksi tiling macOS secara langsung) otomatis benar untuk semua kombinasi ukuran window dan jumlah pane di grid.

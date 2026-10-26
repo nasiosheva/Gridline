@@ -13,6 +13,7 @@ struct RepoPaneView: View {
     let availableRepos: [Repo]
     @ObservedObject var session: RepoSession
     @Binding var topFraction: CGFloat
+    @Binding var sideFraction: CGFloat
     let isActivePane: Bool
     let isMaximized: Bool
     let isTerminalOnly: Bool
@@ -31,6 +32,7 @@ struct RepoPaneView: View {
     @EnvironmentObject private var topAreaStoreRegistry: TopAreaStoreRegistry
     @State private var toast: PaneToast?
     @State private var ambiguousPicker: AmbiguousLinkPicker?
+    @State private var orientation: PaneOrientationPolicy.Orientation = .vertical
 
     var body: some View {
         let topAreaStore = topAreaStoreRegistry.store(for: repo)
@@ -57,19 +59,44 @@ struct RepoPaneView: View {
             if isTerminalOnly {
                 TerminalAreaView(session: session, isActivePane: isActivePane)
             } else {
-                PersistedVSplit(
-                    topFraction: $topFraction,
-                    minTopHeight: 200,
-                    minBottomHeight: 164
-                ) {
-                    TopAreaView(
-                        topAreaStore: topAreaStore,
-                        diffStore: diffStore,
-                        viewerAsSidePanel: viewerAsSidePanel,
-                        onToggleViewerAsSidePanel: onToggleViewerAsSidePanel
-                    )
-                } bottom: {
-                    TerminalAreaView(session: session, isActivePane: isActivePane)
+                Group {
+                    switch orientation {
+                    case .vertical:
+                        PersistedVSplit(
+                            topFraction: $topFraction,
+                            minTopHeight: 200,
+                            minBottomHeight: 164
+                        ) {
+                            TopAreaView(
+                                topAreaStore: topAreaStore,
+                                diffStore: diffStore,
+                                viewerAsSidePanel: viewerAsSidePanel,
+                                onToggleViewerAsSidePanel: onToggleViewerAsSidePanel
+                            )
+                        } bottom: {
+                            TerminalAreaView(session: session, isActivePane: isActivePane)
+                        }
+                    case .horizontal:
+                        PersistedHSplit(
+                            leadingFraction: $sideFraction,
+                            minLeadingWidth: 320,
+                            minTrailingWidth: 320
+                        ) {
+                            TopAreaView(
+                                topAreaStore: topAreaStore,
+                                diffStore: diffStore,
+                                viewerAsSidePanel: viewerAsSidePanel,
+                                onToggleViewerAsSidePanel: onToggleViewerAsSidePanel
+                            )
+                        } trailing: {
+                            TerminalAreaView(session: session, isActivePane: isActivePane)
+                        }
+                    }
+                }
+                .onGeometryChange(for: CGSize.self) { proxy in
+                    proxy.size
+                } action: { newSize in
+                    orientation = PaneOrientationPolicy.orientation(for: newSize, current: orientation)
                 }
             }
         }

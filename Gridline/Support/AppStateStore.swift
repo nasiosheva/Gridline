@@ -368,6 +368,13 @@ final class AppStateStore: ObservableObject {
         persist()
     }
 
+    func setPaneSplitSideFraction(_ fraction: Double, paneID: UUID) {
+        guard let current = state.paneLayout.slots.first(where: { $0.id == paneID })?.sideFraction,
+              abs(current - fraction) > 0.001 else { return }
+        state.paneLayout.setSideFraction(fraction, for: paneID)
+        persist()
+    }
+
     func setViewerAsSidePanel(_ isEnabled: Bool, paneID: UUID) {
         guard state.paneLayout.slots.first(where: { $0.id == paneID })?.viewerAsSidePanel != isEnabled else { return }
         state.paneLayout.setViewerAsSidePanel(isEnabled, for: paneID)

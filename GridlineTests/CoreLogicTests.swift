@@ -313,6 +313,48 @@ final class WordDiffPolicyTests: XCTestCase {
     }
 }
 
+final class PaneOrientationPolicyTests: XCTestCase {
+    func testWideSizeSwitchesVerticalToHorizontal() {
+        let orientation = PaneOrientationPolicy.orientation(
+            for: CGSize(width: 900, height: 400),
+            current: .vertical
+        )
+        XCTAssertEqual(orientation, .horizontal)
+    }
+
+    func testNarrowSizeSwitchesHorizontalToVertical() {
+        let orientation = PaneOrientationPolicy.orientation(
+            for: CGSize(width: 500, height: 450),
+            current: .horizontal
+        )
+        XCTAssertEqual(orientation, .vertical)
+    }
+
+    func testHysteresisZoneKeepsCurrentOrientationWhenAlreadyVertical() {
+        let orientation = PaneOrientationPolicy.orientation(
+            for: CGSize(width: 650, height: 450),
+            current: .vertical
+        )
+        XCTAssertEqual(orientation, .vertical)
+    }
+
+    func testHysteresisZoneKeepsCurrentOrientationWhenAlreadyHorizontal() {
+        let orientation = PaneOrientationPolicy.orientation(
+            for: CGSize(width: 650, height: 450),
+            current: .horizontal
+        )
+        XCTAssertEqual(orientation, .horizontal)
+    }
+
+    func testZeroSizeKeepsCurrentOrientation() {
+        let orientation = PaneOrientationPolicy.orientation(
+            for: CGSize(width: 0, height: 0),
+            current: .vertical
+        )
+        XCTAssertEqual(orientation, .vertical)
+    }
+}
+
 @MainActor
 final class DiffLinePairingPolicyTests: XCTestCase {
     func testPairsContextsChangesAndUnmatchedAdditions() {
@@ -899,7 +941,7 @@ final class PaneLayoutTests: XCTestCase {
             slots: [first], displayPaneCount: 10, activePaneID: UUID(),
             topColumnFraction: 0, bottomColumnFraction: 1, rowFraction: 0.5,
             gridDividerFractions: ["columns.0": [-1, 0.4, 1]],
-            maximizedPaneID: UUID(), terminalOnlyPaneID: UUID()
+            maximizedPaneID: UUID()
         )
         XCTAssertEqual(layout.displayPaneCount, 1)
         XCTAssertEqual(layout.activePaneID, first.id)
@@ -907,7 +949,6 @@ final class PaneLayoutTests: XCTestCase {
         XCTAssertEqual(layout.bottomColumnFraction, 0.9)
         XCTAssertEqual(layout.gridDividerFractions["columns.0"], [0.1, 0.4, 0.9])
         XCTAssertNil(layout.maximizedPaneID)
-        XCTAssertNil(layout.terminalOnlyPaneID)
 
         let empty = PaneLayout(slots: [], displayPaneCount: 0)
         XCTAssertEqual(empty.slots.count, 1)
@@ -960,14 +1001,19 @@ final class PaneLayoutTests: XCTestCase {
         XCTAssertEqual(layout.activeSlot.repoID, repoB)
 
         layout.toggleTerminalOnlyPane(selectedPane)
+        XCTAssertTrue(layout.slots.first(where: { $0.id == selectedPane })!.isTerminalOnly)
+
+        // repoA already has its own slot elsewhere, so this swaps whole
+        // PaneSlot structs (not a fresh slot) — each slot's own isTerminalOnly
+        // travels with it rather than "sticking" to the grid position.
         layout.selectRepo(repoA, in: selectedPane)
         let paneWithRepoA = layout.activePaneID
-        XCTAssertEqual(layout.terminalOnlyPaneID, paneWithRepoA)
         XCTAssertEqual(layout.activeSlot.repoID, repoA)
+        XCTAssertFalse(layout.slots.first(where: { $0.id == paneWithRepoA })!.isTerminalOnly)
+        XCTAssertTrue(layout.slots.first(where: { $0.id == selectedPane })!.isTerminalOnly)
 
         layout.clearRepo(in: paneWithRepoA)
         XCTAssertNil(layout.activeSlot.repoID)
-        XCTAssertNil(layout.terminalOnlyPaneID)
         layout.restoreRepo(repoB, in: paneWithRepoA)
         XCTAssertEqual(layout.activePaneID, selectedPane)
         layout.restoreRepo(repoA, in: UUID())
@@ -976,24 +1022,40 @@ final class PaneLayoutTests: XCTestCase {
         XCTAssertTrue(layout.slots.contains(where: { $0.repoID == repoA }))
     }
 
-    func testTransientModesRemoveReferencesAndFocusNavigation() {
+    func testTerminalOnlyModeIsIndependentPerPaneWhileMaximizeStaysExclusive() {
         let repos = (0..<4).map { _ in UUID() }
         var layout = PaneLayout(slots: repos.map { PaneSlot(repoID: $0) })
         let first = layout.slots[0].id
         let second = layout.slots[1].id
+        let third = layout.slots[2].id
         let last = layout.slots[3].id
 
+        // Maximizing a pane in the grid stays exclusive — only one pane can
+        // occupy the whole grid at a time, unrelated to terminal-only.
         layout.toggleMaximizedPane(first)
         XCTAssertEqual(layout.maximizedPaneID, first)
-        layout.toggleTerminalOnlyPane(second)
-        XCTAssertNil(layout.maximizedPaneID)
-        XCTAssertEqual(layout.terminalOnlyPaneID, second)
-        layout.toggleTerminalOnlyPane(second)
-        XCTAssertNil(layout.terminalOnlyPaneID)
-        layout.toggleMaximizedPane(UUID())
+        layout.toggleMaximizedPane(second)
+        XCTAssertEqual(layout.maximizedPaneID, second)
+
+        // Terminal-only is per-pane: toggling it on several panes does not
+        // clear each other and does not touch maximizedPaneID (this is the
+        // behavior the single global `terminalOnlyPaneID` used to break).
         layout.toggleTerminalOnlyPane(first)
+        layout.toggleTerminalOnlyPane(third)
+        XCTAssertEqual(layout.maximizedPaneID, second)
+        XCTAssertTrue(layout.slots.first(where: { $0.id == first })!.isTerminalOnly)
+        XCTAssertTrue(layout.slots.first(where: { $0.id == third })!.isTerminalOnly)
+        XCTAssertFalse(layout.slots.first(where: { $0.id == second })!.isTerminalOnly)
+        XCTAssertFalse(layout.slots.first(where: { $0.id == last })!.isTerminalOnly)
+
+        layout.toggleTerminalOnlyPane(first)
+        XCTAssertFalse(layout.slots.first(where: { $0.id == first })!.isTerminalOnly)
+        XCTAssertTrue(layout.slots.first(where: { $0.id == third })!.isTerminalOnly)
+
+        layout.toggleMaximizedPane(UUID())
         layout.removeRepoReference(repos[0])
-        XCTAssertNil(layout.terminalOnlyPaneID)
+        XCTAssertNil(layout.slots.first(where: { $0.id == first })?.repoID)
+        XCTAssertTrue(layout.slots.first(where: { $0.id == third })!.isTerminalOnly)
 
         layout.activePaneID = second
         layout.focus(.left)
@@ -1036,10 +1098,13 @@ final class PaneLayoutTests: XCTestCase {
         XCTAssertEqual(slot.topFraction, 0.6)
         XCTAssertFalse(slot.viewerAsSidePanel)
 
+        // Migrasi dari format lama: `terminalOnlyPaneID` global dikonversi jadi
+        // `isTerminalOnly` pada slot yang bersangkutan, dan tidak lagi saling
+        // meniadakan `maximizedPaneID` (keduanya independen sekarang).
         let layoutJSON = "{\"slots\":[{\"id\":\"\(slotID.uuidString)\"}],\"maximizedPaneID\":\"\(slotID.uuidString)\",\"terminalOnlyPaneID\":\"\(slotID.uuidString)\"}"
         let layout = try JSONDecoder().decode(PaneLayout.self, from: Data(layoutJSON.utf8))
         XCTAssertEqual(layout.maximizedPaneID, slotID)
-        XCTAssertNil(layout.terminalOnlyPaneID)
+        XCTAssertTrue(layout.slots.first(where: { $0.id == slotID })!.isTerminalOnly)
         XCTAssertEqual(layout.activeSlot.id, slotID)
 
         let legacy = PaneLayout.migrated(activeRepoID: UUID(), topFraction: 0.25)
@@ -1051,22 +1116,22 @@ final class PaneLayoutTests: XCTestCase {
 
     func testRemovingActivePaneAndChangingDisplayCountNormalizeModes() {
         let first = PaneSlot(repoID: UUID())
-        let active = PaneSlot(repoID: UUID())
+        let active = PaneSlot(repoID: UUID(), isTerminalOnly: true)
         var layout = PaneLayout(slots: [first, active], displayPaneCount: 2)
         layout.activePaneID = active.id
         layout.maximizedPaneID = active.id
-        layout.terminalOnlyPaneID = active.id
 
+        // `isTerminalOnly` hidup di dalam slot itu sendiri sekarang, jadi
+        // tidak ada ID menggantung yang perlu dinormalisasi terpisah saat
+        // slot-nya dihapus — ia ikut hilang bersama slot secara alami.
         XCTAssertTrue(layout.removePane(active.id))
         XCTAssertEqual(layout.activePaneID, first.id)
         XCTAssertNil(layout.maximizedPaneID)
-        XCTAssertNil(layout.terminalOnlyPaneID)
+        XCTAssertFalse(layout.slots.contains(where: { $0.id == active.id }))
 
         layout.maximizedPaneID = UUID()
-        layout.terminalOnlyPaneID = UUID()
         layout.setDisplayPaneCount(2)
         XCTAssertNil(layout.maximizedPaneID)
-        XCTAssertNil(layout.terminalOnlyPaneID)
         XCTAssertTrue(layout.removePane(layout.slots.last!.id))
         XCTAssertFalse(layout.removePane(first.id))
     }

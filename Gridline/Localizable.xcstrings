@@ -1554,6 +1554,22 @@
         }
       }
     },
+    "pane.open_in_terminal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in Terminal"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buka di Terminal"
+          }
+        }
+      }
+    },
     "pane.restore_grid" : {
       "localizations" : {
         "en" : {

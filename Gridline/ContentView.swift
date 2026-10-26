@@ -298,7 +298,7 @@ struct ContentView: View {
     }
 
     private var topAreaRepoIDs: Set<UUID> {
-        Set(visiblePaneSlots.filter { $0.id != layout.terminalOnlyPaneID }.compactMap(\.repoID))
+        Set(visiblePaneSlots.filter { !$0.isTerminalOnly }.compactMap(\.repoID))
     }
 
     private func updateStoreVisibility(refreshExistingDiffStores: Bool = false) {
@@ -408,9 +408,15 @@ struct ContentView: View {
                             },
                             set: { appState.setPaneSplitTopFraction(Double($0), paneID: slot.id) }
                         ),
+                        sideFraction: Binding(
+                            get: {
+                                CGFloat(appState.state.paneLayout.slots.first(where: { $0.id == slot.id })?.sideFraction ?? 0.6)
+                            },
+                            set: { appState.setPaneSplitSideFraction(Double($0), paneID: slot.id) }
+                        ),
                         isActivePane: isActive,
                         isMaximized: layout.maximizedPaneID == slot.id,
-                        isTerminalOnly: layout.terminalOnlyPaneID == slot.id,
+                        isTerminalOnly: slot.isTerminalOnly,
                         viewerAsSidePanel: slot.viewerAsSidePanel,
                         onSelectRepo: { appState.selectRepo(id: $0, in: slot.id) },
                         onManageRepositories: { activeSheet = .repositoryManager },

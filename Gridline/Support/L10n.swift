@@ -79,6 +79,7 @@ enum L10n {
 
     enum Pane {
         static let actions: LocalizedStringResource = "pane.actions"
+        static let openInTerminal: LocalizedStringResource = "pane.open_in_terminal"
         static let selectRepository: LocalizedStringResource = "pane.select_repository"
         static let close: LocalizedStringResource = "pane.close"
         static let accessibilityLabel: LocalizedStringResource = "pane.accessibility_label"

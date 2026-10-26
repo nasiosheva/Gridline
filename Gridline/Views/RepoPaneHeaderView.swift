@@ -121,13 +121,6 @@ struct RepoPaneHeaderView: View {
                     )
                 }
 
-                Button(action: onToggleTerminalOnly) {
-                    Label(
-                        isTerminalOnly ? L10n.Pane.showTopArea : L10n.Pane.terminalOnly,
-                        systemImage: isTerminalOnly ? "rectangle.bottomhalf.inset.filled" : "rectangle.bottomhalf.inset"
-                    )
-                }
-
                 Button {
                     showsWorktreePicker = true
                 } label: {
@@ -258,9 +251,42 @@ struct RepoPaneHeaderView: View {
             if status.behind > 0 || diffStore.isPulling {
                 pullButton(for: status)
             }
+
+            Button {
+                openInSystemTerminal()
+            } label: {
+                Image(systemName: "terminal")
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(L10n.Pane.openInTerminal)
+            .accessibilityLabel(L10n.Pane.openInTerminal)
+
+            Button(action: onToggleTerminalOnly) {
+                Image(systemName: isTerminalOnly ? "rectangle.bottomhalf.inset.filled" : "rectangle.bottomhalf.inset")
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(isTerminalOnly ? L10n.Pane.showTopArea : L10n.Pane.terminalOnly)
+            .accessibilityLabel(isTerminalOnly ? L10n.Pane.showTopArea : L10n.Pane.terminalOnly)
         }
         .font(.caption)
         .labelStyle(.titleAndIcon)
+    }
+
+    /// Membuka Terminal.app sistem (bukan terminal bawaan Gridline) di root
+    /// folder repo — mirror perilaku "buka folder ini di Terminal" Finder.
+    private func openInSystemTerminal() {
+        guard let terminalURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else { return }
+        NSWorkspace.shared.open(
+            [URL(fileURLWithPath: repo.path)],
+            withApplicationAt: terminalURL,
+            configuration: NSWorkspace.OpenConfiguration()
+        )
     }
 }
 

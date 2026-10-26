@@ -237,7 +237,7 @@ Viewer berada di area atas pane yang sama dengan diff, sebagai tab.
 
 ## 8. Panel Terminal
 
-Terminal berada di area bawah setiap pane.
+Terminal berada di area bawah setiap pane secara default (diff/viewer di atas, terminal di bawah, pembagi bisa digeser). Saat bentuk pane lebar-pendek (mis. window di-tile ke atas/bawah lewat menu Window macOS), pane otomatis berpindah ke orientasi kiri-kanan: diff/viewer di kiri, terminal di kanan, dengan pembagi sendiri yang posisinya disimpan terpisah (D43). Pane yang sempit-tinggi (di-tile ke kiri/kanan) tetap atas-bawah seperti semula.
 
 **Bar tab**
 - Tombol **+** untuk tab baru.

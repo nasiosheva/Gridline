@@ -57,25 +57,41 @@ struct PaneSlot: Identifiable, Codable, Equatable {
     let id: UUID
     var repoID: UUID?
     var topFraction: Double
+    /// Posisi pembagi saat pane memakai orientasi horizontal (diff kiri,
+    /// terminal kanan) — lihat `PaneOrientationPolicy`. Terpisah dari
+    /// `topFraction` karena keduanya dipakai bergantian tergantung bentuk
+    /// pane saat itu, bukan menimpa satu sama lain.
+    var sideFraction: Double
     var viewerAsSidePanel: Bool
+    /// Per-pane: menyembunyikan diff/viewer, terminal memakai seluruh pane.
+    /// Dulu disimpan sebagai satu `PaneLayout.terminalOnlyPaneID` global
+    /// (jadi cuma satu pane se-layout yang bisa begini sekaligus) — sekarang
+    /// per-slot seperti `viewerAsSidePanel`, supaya tiap pane independen.
+    var isTerminalOnly: Bool
 
     private enum CodingKeys: String, CodingKey {
         case id
         case repoID
         case topFraction
+        case sideFraction
         case viewerAsSidePanel
+        case isTerminalOnly
     }
 
     init(
         id: UUID = UUID(),
         repoID: UUID? = nil,
         topFraction: Double = 0.6,
-        viewerAsSidePanel: Bool = false
+        sideFraction: Double = 0.6,
+        viewerAsSidePanel: Bool = false,
+        isTerminalOnly: Bool = false
     ) {
         self.id = id
         self.repoID = repoID
         self.topFraction = topFraction
+        self.sideFraction = sideFraction
         self.viewerAsSidePanel = viewerAsSidePanel
+        self.isTerminalOnly = isTerminalOnly
     }
 
     init(from decoder: Decoder) throws {
@@ -84,7 +100,9 @@ struct PaneSlot: Identifiable, Codable, Equatable {
             id: try container.decode(UUID.self, forKey: .id),
             repoID: try container.decodeIfPresent(UUID.self, forKey: .repoID),
             topFraction: try container.decodeIfPresent(Double.self, forKey: .topFraction) ?? 0.6,
-            viewerAsSidePanel: try container.decodeIfPresent(Bool.self, forKey: .viewerAsSidePanel) ?? false
+            sideFraction: try container.decodeIfPresent(Double.self, forKey: .sideFraction) ?? 0.6,
+            viewerAsSidePanel: try container.decodeIfPresent(Bool.self, forKey: .viewerAsSidePanel) ?? false,
+            isTerminalOnly: try container.decodeIfPresent(Bool.self, forKey: .isTerminalOnly) ?? false
         )
     }
 
@@ -93,7 +111,9 @@ struct PaneSlot: Identifiable, Codable, Equatable {
         try container.encode(id, forKey: .id)
         try container.encodeIfPresent(repoID, forKey: .repoID)
         try container.encode(topFraction, forKey: .topFraction)
+        try container.encode(sideFraction, forKey: .sideFraction)
         try container.encode(viewerAsSidePanel, forKey: .viewerAsSidePanel)
+        try container.encode(isTerminalOnly, forKey: .isTerminalOnly)
     }
 }
 
@@ -106,7 +126,6 @@ struct PaneLayout: Codable, Equatable {
     var rowFraction: Double
     var gridDividerFractions: [String: [Double]]
     var maximizedPaneID: UUID?
-    var terminalOnlyPaneID: UUID?
 
     private enum CodingKeys: String, CodingKey {
         case slots
@@ -117,7 +136,10 @@ struct PaneLayout: Codable, Equatable {
         case rowFraction
         case dividerFractions
         case maximizedPaneID
-        case terminalOnlyPaneID
+        /// Hanya dibaca untuk migrasi — versi lama menyimpan satu ID pane
+        /// terminal-only global di sini; sekarang per-pane lewat
+        /// `PaneSlot.isTerminalOnly`, jadi kunci ini tidak ditulis lagi.
+        case legacyTerminalOnlyPaneID = "terminalOnlyPaneID"
     }
 
     init(
@@ -128,8 +150,7 @@ struct PaneLayout: Codable, Equatable {
         bottomColumnFraction: Double = 0.5,
         rowFraction: Double = 0.5,
         gridDividerFractions: [String: [Double]] = [:],
-        maximizedPaneID: UUID? = nil,
-        terminalOnlyPaneID: UUID? = nil
+        maximizedPaneID: UUID? = nil
     ) {
         let resolvedSlots = slots.isEmpty ? [PaneSlot()] : slots
         self.slots = resolvedSlots
@@ -144,17 +165,15 @@ struct PaneLayout: Codable, Equatable {
             $0.map { BoundedValue.clamp($0, to: 0.1...0.9) }
         }
         self.maximizedPaneID = resolvedSlots.contains(where: { $0.id == maximizedPaneID }) ? maximizedPaneID : nil
-        self.terminalOnlyPaneID = resolvedSlots.contains(where: { $0.id == terminalOnlyPaneID })
-            ? terminalOnlyPaneID
-            : nil
-        if self.maximizedPaneID != nil {
-            self.terminalOnlyPaneID = nil
-        }
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let decodedSlots = try container.decodeIfPresent([PaneSlot].self, forKey: .slots) ?? []
+        var decodedSlots = try container.decodeIfPresent([PaneSlot].self, forKey: .slots) ?? []
+        if let legacyTerminalOnlyPaneID = try container.decodeIfPresent(UUID.self, forKey: .legacyTerminalOnlyPaneID),
+           let legacyIndex = decodedSlots.firstIndex(where: { $0.id == legacyTerminalOnlyPaneID }) {
+            decodedSlots[legacyIndex].isTerminalOnly = true
+        }
         self.init(
             slots: decodedSlots,
             displayPaneCount: try container.decodeIfPresent(Int.self, forKey: .displayPaneCount) ?? decodedSlots.count,
@@ -163,8 +182,7 @@ struct PaneLayout: Codable, Equatable {
             bottomColumnFraction: try container.decodeIfPresent(Double.self, forKey: .bottomColumnFraction) ?? 0.5,
             rowFraction: try container.decodeIfPresent(Double.self, forKey: .rowFraction) ?? 0.5,
             gridDividerFractions: try container.decodeIfPresent([String: [Double]].self, forKey: .dividerFractions) ?? [:],
-            maximizedPaneID: try container.decodeIfPresent(UUID.self, forKey: .maximizedPaneID),
-            terminalOnlyPaneID: try container.decodeIfPresent(UUID.self, forKey: .terminalOnlyPaneID)
+            maximizedPaneID: try container.decodeIfPresent(UUID.self, forKey: .maximizedPaneID)
         )
     }
 
@@ -178,7 +196,6 @@ struct PaneLayout: Codable, Equatable {
         try container.encode(rowFraction, forKey: .rowFraction)
         try container.encode(gridDividerFractions, forKey: .dividerFractions)
         try container.encodeIfPresent(maximizedPaneID, forKey: .maximizedPaneID)
-        try container.encodeIfPresent(terminalOnlyPaneID, forKey: .terminalOnlyPaneID)
     }
 
     static func migrated(activeRepoID: UUID?, topFraction: Double) -> PaneLayout {
@@ -232,9 +249,6 @@ struct PaneLayout: Codable, Equatable {
         if maximizedPaneID == paneID {
             maximizedPaneID = nil
         }
-        if terminalOnlyPaneID == paneID {
-            terminalOnlyPaneID = nil
-        }
         return true
     }
 
@@ -281,9 +295,6 @@ struct PaneLayout: Codable, Equatable {
         if maximizedPaneID == paneID {
             maximizedPaneID = nil
         }
-        if terminalOnlyPaneID == paneID {
-            terminalOnlyPaneID = nil
-        }
     }
 
     mutating func restoreRepo(_ repoID: UUID, in paneID: UUID) {
@@ -303,7 +314,6 @@ struct PaneLayout: Codable, Equatable {
     mutating func selectRepo(_ repoID: UUID, in paneID: UUID) {
         guard let paneIndex = slots.firstIndex(where: { $0.id == paneID }) else { return }
         let preservesMaximizedMode = maximizedPaneID == paneID
-        let preservesTerminalOnlyMode = terminalOnlyPaneID == paneID
 
         if let existingIndex = slots.firstIndex(where: { $0.repoID == repoID }) {
             guard existingIndex != paneIndex else {
@@ -328,34 +338,26 @@ struct PaneLayout: Codable, Equatable {
         if preservesMaximizedMode {
             maximizedPaneID = activePaneID
         }
-        if preservesTerminalOnlyMode {
-            terminalOnlyPaneID = activePaneID
-        }
     }
 
     mutating func toggleMaximizedPane(_ paneID: UUID) {
         guard slots.contains(where: { $0.id == paneID && $0.repoID != nil }) else { return }
         activePaneID = paneID
         maximizedPaneID = maximizedPaneID == paneID ? nil : paneID
-        terminalOnlyPaneID = nil
     }
 
+    /// Per-pane dan independen dari `maximizedPaneID` — beberapa pane bisa
+    /// masing-masing menyembunyikan diff/viewer-nya sendiri secara
+    /// bersamaan, tidak saling meniadakan (lihat komentar `PaneSlot.isTerminalOnly`).
     mutating func toggleTerminalOnlyPane(_ paneID: UUID) {
-        guard slots.contains(where: { $0.id == paneID && $0.repoID != nil }) else { return }
+        guard let index = slots.firstIndex(where: { $0.id == paneID && $0.repoID != nil }) else { return }
         activePaneID = paneID
-        terminalOnlyPaneID = terminalOnlyPaneID == paneID ? nil : paneID
-        maximizedPaneID = nil
+        slots[index].isTerminalOnly.toggle()
     }
 
     private mutating func normalizeTransientModes() {
         if let maximizedPaneID, !slots.contains(where: { $0.id == maximizedPaneID }) {
             self.maximizedPaneID = nil
-        }
-        if let terminalOnlyPaneID, !slots.contains(where: { $0.id == terminalOnlyPaneID }) {
-            self.terminalOnlyPaneID = nil
-        }
-        if maximizedPaneID != nil {
-            terminalOnlyPaneID = nil
         }
     }
 
@@ -364,9 +366,6 @@ struct PaneLayout: Codable, Equatable {
             slots[index].repoID = nil
             if maximizedPaneID == slots[index].id {
                 maximizedPaneID = nil
-            }
-            if terminalOnlyPaneID == slots[index].id {
-                terminalOnlyPaneID = nil
             }
         }
     }
@@ -409,6 +408,11 @@ struct PaneLayout: Codable, Equatable {
     mutating func setTopFraction(_ fraction: Double, for paneID: UUID) {
         guard let index = slots.firstIndex(where: { $0.id == paneID }) else { return }
         slots[index].topFraction = BoundedValue.clamp(fraction, to: 0.1...0.9)
+    }
+
+    mutating func setSideFraction(_ fraction: Double, for paneID: UUID) {
+        guard let index = slots.firstIndex(where: { $0.id == paneID }) else { return }
+        slots[index].sideFraction = BoundedValue.clamp(fraction, to: 0.1...0.9)
     }
 
     mutating func setViewerAsSidePanel(_ isEnabled: Bool, for paneID: UUID) {
