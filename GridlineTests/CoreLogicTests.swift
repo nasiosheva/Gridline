@@ -1,6 +1,8 @@
 import AppKit
+import PDFKit
 import XCTest
 import UserNotifications
+import SwiftUI
 @testable import Gridline
 
 @MainActor
@@ -247,6 +249,110 @@ final class DiffModelTests: XCTestCase {
         entry.fileSizeBytes = nil
         entry.additions = DiffVisibilityPolicy.largeChangeLineLimit
         XCTAssertTrue(DiffVisibilityPolicy.isLarge(entry))
+    }
+}
+
+@MainActor
+final class WordDiffPolicyTests: XCTestCase {
+    func testUnchangedLinesHaveNoChangedRanges() {
+        XCTAssertEqual(WordDiffPolicy.changedRanges(old: "same line", new: "same line").old, [])
+        XCTAssertEqual(WordDiffPolicy.changedRanges(old: "same line", new: "same line").new, [])
+    }
+
+    func testChangedWordsProduceSeparateRangesAndPreserveMatchingTokens() {
+        let ranges = WordDiffPolicy.changedRanges(old: "keep old value = 1", new: "keep new value = 2")
+
+        XCTAssertEqual(ranges.old, [5..<8, 17..<18])
+        XCTAssertEqual(ranges.new, [5..<8, 17..<18])
+    }
+
+    func testUnicodeRangesUseCharacterOffsets() {
+        let ranges = WordDiffPolicy.changedRanges(old: "café_value9!", new: "café_value8!")
+
+        XCTAssertEqual(ranges.old, [0..<11])
+        XCTAssertEqual(ranges.new, [0..<11])
+    }
+
+    func testInsertedTokenLeavesUnchangedSideWithoutRanges() {
+        let ranges = WordDiffPolicy.changedRanges(old: "value", new: "value!")
+
+        XCTAssertTrue(ranges.old.isEmpty)
+        XCTAssertEqual(ranges.new, [5..<6])
+    }
+
+    func testEmptySideFallsBackToWholeLineRanges() {
+        let insertion = WordDiffPolicy.changedRanges(old: "", new: "text")
+        XCTAssertEqual(insertion.old, [0..<0])
+        XCTAssertEqual(insertion.new, [0..<4])
+
+        let deletion = WordDiffPolicy.changedRanges(old: "text", new: "")
+        XCTAssertEqual(deletion.old, [0..<4])
+        XCTAssertEqual(deletion.new, [0..<0])
+    }
+
+    func testLinesOverTokenLimitUseWholeLineFallback() {
+        let old = String(repeating: "a ", count: 128) + "a"
+        let new = String(repeating: "b ", count: 128) + "b"
+
+        let ranges = WordDiffPolicy.changedRanges(old: old, new: new)
+
+        XCTAssertEqual(ranges.old, [0..<old.count])
+        XCTAssertEqual(ranges.new, [0..<new.count])
+    }
+
+    func testMaximumTokenCountStillUsesWordDiff() {
+        let suffix = String(repeating: "a ", count: 127)
+        let old = "a " + suffix
+        let new = "b " + suffix
+
+        let ranges = WordDiffPolicy.changedRanges(old: old, new: new)
+
+        XCTAssertEqual(old.count, 256)
+        XCTAssertEqual(ranges.old, [0..<1])
+        XCTAssertEqual(ranges.new, [0..<1])
+    }
+}
+
+@MainActor
+final class DiffLinePairingPolicyTests: XCTestCase {
+    func testPairsContextsChangesAndUnmatchedAdditions() {
+        let contextBefore = DiffLine(kind: .context, oldLineNumber: 1, newLineNumber: 1, text: "before")
+        let deletionOne = DiffLine(kind: .deletion, oldLineNumber: 2, newLineNumber: nil, text: "old one")
+        let deletionTwo = DiffLine(kind: .deletion, oldLineNumber: 3, newLineNumber: nil, text: "old two")
+        let addition = DiffLine(kind: .addition, oldLineNumber: nil, newLineNumber: 2, text: "new")
+        let contextAfter = DiffLine(kind: .context, oldLineNumber: 4, newLineNumber: 3, text: "after")
+        let trailingAddition = DiffLine(kind: .addition, oldLineNumber: nil, newLineNumber: 4, text: "trailing")
+
+        let pairs = DiffLinePairingPolicy.pairs(in: [
+            contextBefore, deletionOne, deletionTwo, addition, contextAfter, trailingAddition
+        ])
+
+        XCTAssertEqual(pairs.count, 5)
+        XCTAssertEqual(pairs[0].0?.id, contextBefore.id)
+        XCTAssertEqual(pairs[0].1?.id, contextBefore.id)
+        XCTAssertEqual(pairs[1].0?.id, deletionOne.id)
+        XCTAssertEqual(pairs[1].1?.id, addition.id)
+        XCTAssertEqual(pairs[2].0?.id, deletionTwo.id)
+        XCTAssertNil(pairs[2].1)
+        XCTAssertEqual(pairs[3].0?.id, contextAfter.id)
+        XCTAssertEqual(pairs[3].1?.id, contextAfter.id)
+        XCTAssertNil(pairs[4].0)
+        XCTAssertEqual(pairs[4].1?.id, trailingAddition.id)
+    }
+
+    func testPairsExtraAdditionsAndEmptyInput() {
+        let deletion = DiffLine(kind: .deletion, oldLineNumber: 1, newLineNumber: nil, text: "old")
+        let firstAddition = DiffLine(kind: .addition, oldLineNumber: nil, newLineNumber: 1, text: "new one")
+        let secondAddition = DiffLine(kind: .addition, oldLineNumber: nil, newLineNumber: 2, text: "new two")
+
+        let pairs = DiffLinePairingPolicy.pairs(in: [deletion, firstAddition, secondAddition])
+
+        XCTAssertEqual(pairs.count, 2)
+        XCTAssertEqual(pairs[0].0?.id, deletion.id)
+        XCTAssertEqual(pairs[0].1?.id, firstAddition.id)
+        XCTAssertNil(pairs[1].0)
+        XCTAssertEqual(pairs[1].1?.id, secondAddition.id)
+        XCTAssertTrue(DiffLinePairingPolicy.pairs(in: []).isEmpty)
     }
 }
 
@@ -1257,6 +1363,77 @@ final class ZeroCoverageViewTests: XCTestCase {
         XCTAssertEqual(openedLink, "Sources/App.swift:9")
     }
 
+    func testSettingsViewMountsInsideHostedHierarchy() {
+        let hostingView = NSHostingView(rootView: GridlineSettingsView())
+        hostingView.frame = NSRect(x: 0, y: 0, width: 500, height: 400)
+        hostingView.layoutSubtreeIfNeeded()
+        hostingView.displayIfNeeded()
+
+        XCTAssertFalse(hostingView.subviews.isEmpty)
+    }
+
+    func testPaneToastAppearsAndExpiresInHostedHierarchy() async throws {
+        var toast: PaneToast? = PaneToast(message: "File opened")
+        let binding = Binding<PaneToast?>(get: { toast }, set: { toast = $0 })
+        let hostingView = NSHostingView(rootView: Text("content").paneToast(binding, duration: .milliseconds(20)))
+        hostingView.frame = NSRect(x: 0, y: 0, width: 500, height: 300)
+        hostingView.layoutSubtreeIfNeeded()
+        hostingView.displayIfNeeded()
+
+        try await waitUntil(timeout: .seconds(2)) { toast == nil }
+    }
+
+    func testClosedRepoToastRestoresItsRepository() throws {
+        let repository = Repo(path: "/tmp/example", displayName: "Example")
+        var restoredName: String?
+        let hostingView = NSHostingView(rootView: ClosedRepoToastView(repoName: repository.name) {
+            restoredName = repository.name
+        })
+        hostingView.frame = NSRect(x: 0, y: 0, width: 500, height: 100)
+        hostingView.layoutSubtreeIfNeeded()
+        hostingView.displayIfNeeded()
+
+        let button = try XCTUnwrap(descendantView(of: NSButton.self, in: hostingView))
+        button.performClick(nil)
+
+        XCTAssertEqual(restoredName, repository.name)
+    }
+
+    func testReadOnlyTextViewMountsUpdatesAndConsumesScrollRequests() async throws {
+        let consumedScroll = expectation(description: "scroll request is consumed")
+        let hostingView = NSHostingView(rootView: ReadOnlyTextView(
+            text: "first line\nsecond line\n",
+            lineStartOffsets: [0, 11],
+            contentVersion: UUID()
+        ))
+        hostingView.frame = NSRect(x: 0, y: 0, width: 500, height: 300)
+        hostingView.layoutSubtreeIfNeeded()
+        hostingView.displayIfNeeded()
+
+        let scrollView = try XCTUnwrap(descendantView(of: NSScrollView.self, in: hostingView))
+        let textView = try XCTUnwrap(scrollView.documentView as? NSTextView)
+        XCTAssertEqual(textView.string, "first line\nsecond line\n")
+        XCTAssertTrue(scrollView.hasVerticalRuler)
+        XCTAssertTrue(scrollView.hasVerticalScroller)
+        XCTAssertTrue(scrollView.hasHorizontalScroller)
+        let ruler = try XCTUnwrap(scrollView.verticalRulerView as? LineNumberRulerView)
+        ruler.drawHashMarksAndLabels(in: ruler.bounds)
+
+        hostingView.rootView = ReadOnlyTextView(
+            text: "updated line\nlast line\n",
+            lineStartOffsets: [0, 13],
+            contentVersion: UUID(),
+            scrollToLine: 2,
+            onDidConsumeScrollRequest: { consumedScroll.fulfill() }
+        )
+        hostingView.layoutSubtreeIfNeeded()
+        hostingView.displayIfNeeded()
+
+        XCTAssertEqual(textView.string, "updated line\nlast line\n")
+        ruler.drawHashMarksAndLabels(in: ruler.bounds)
+        await fulfillment(of: [consumedScroll], timeout: 2)
+    }
+
     func testClipboardAndLineNumberRulerSetup() {
         let pasteboard = NSPasteboard.general
         let previousValue = pasteboard.string(forType: .string)
@@ -1277,11 +1454,24 @@ final class ZeroCoverageViewTests: XCTestCase {
         XCTAssertEqual(ruler.ruleThickness, 44)
     }
 
-    func testPDFKitViewFactoryConfiguresPreviewView() throws {
+    func testPDFKitViewMountsAndUpdatesItsDocument() throws {
         let directory = try TemporaryTestDirectory()
-        let file = try directory.write("preview.pdf", contents: "%PDF-1.4")
-        let pdfView = PDFKitView.makePDFView(url: file)
+        let firstFile = try directory.write("preview.pdf", contents: "%PDF-1.4")
+        let secondFile = try directory.write("updated.pdf", contents: "%PDF-1.4")
+        let pdfView = PDFKitView.makePDFView(url: firstFile)
         XCTAssertTrue(pdfView.autoScales)
+
+        let hostingView = NSHostingView(rootView: PDFKitView(url: firstFile))
+        hostingView.frame = NSRect(x: 0, y: 0, width: 500, height: 400)
+        hostingView.layoutSubtreeIfNeeded()
+        hostingView.displayIfNeeded()
+        let hostedPDFView = try XCTUnwrap(descendantView(of: PDFView.self, in: hostingView))
+        XCTAssertTrue(hostedPDFView.autoScales)
+
+        hostingView.rootView = PDFKitView(url: secondFile)
+        hostingView.layoutSubtreeIfNeeded()
+        hostingView.displayIfNeeded()
+        XCTAssertTrue(hostedPDFView.autoScales)
     }
 
     func testDiffAndTopAreaBodiesCoverLocalFocusAndViewerBranches() async throws {
@@ -1352,6 +1542,14 @@ final class ZeroCoverageViewTests: XCTestCase {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         XCTFail("The view model did not reach the expected content state.")
+    }
+
+    private func descendantView<View: NSView>(of type: View.Type, in root: NSView) -> View? {
+        if let match = root as? View { return match }
+        for child in root.subviews {
+            if let match = descendantView(of: type, in: child) { return match }
+        }
+        return nil
     }
 }
 

@@ -114,6 +114,59 @@ final class GitMetadataRefreshTests: XCTestCase {
 }
 
 @MainActor
+final class GitPullServiceTests: XCTestCase {
+    func testPullSucceedsForConfiguredUpstream() async throws {
+        let repository = try TemporaryGitRepository()
+        try configureAdvancedUpstream(for: repository)
+
+        let result = await GitPullService.pull(at: repository.url.path)
+
+        XCTAssertEqual(result, .succeeded)
+        XCTAssertEqual(
+            try String(contentsOf: repository.url.appendingPathComponent("tracked.txt"), encoding: .utf8),
+            "upstream change\n"
+        )
+    }
+
+    func testPullFailsWhenRepositoryHasNoConfiguredUpstream() async throws {
+        let repository = try TemporaryGitRepository()
+
+        let result = await GitPullService.pull(at: repository.url.path)
+
+        XCTAssertEqual(result, .failed)
+    }
+
+    func testPullRefusesToMergeDivergedBranches() async throws {
+        let repository = try TemporaryGitRepository()
+        try configureAdvancedUpstream(for: repository)
+        try repository.advanceBranch("main", fileContents: "local change\n")
+
+        let result = await GitPullService.pull(at: repository.url.path)
+
+        XCTAssertEqual(result, .failed)
+        XCTAssertEqual(
+            try String(contentsOf: repository.url.appendingPathComponent("tracked.txt"), encoding: .utf8),
+            "initial\n"
+        )
+    }
+
+    private func configureAdvancedUpstream(for repository: TemporaryGitRepository) throws {
+        let remote = repository.url.appendingPathComponent("remote.git")
+        try repository.git("init", "--bare", remote.path)
+        try repository.git("remote", "add", "origin", remote.path)
+        try repository.git("push", "--set-upstream", "origin", "main")
+
+        let updater = try TemporaryGitRepository()
+        try updater.git("remote", "add", "origin", remote.path)
+        try updater.git("fetch", "origin")
+        try updater.git("reset", "--hard", "origin/main")
+        try Data("upstream change\n".utf8).write(to: updater.url.appendingPathComponent("tracked.txt"))
+        try updater.git("commit", "--quiet", "-am", "upstream change")
+        try updater.git("push", "origin", "main")
+    }
+}
+
+@MainActor
 final class RepoDiffStoreTests: XCTestCase {
     func testRefreshPartitionsStatusAndSelectsFilesWithinBounds() async throws {
         let repository = try TemporaryGitRepository()
