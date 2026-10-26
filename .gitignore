@@ -24,3 +24,6 @@ CLAUDE.md
 
 # Aider local history and cache
 .aider*
+
+# JetBrains IDE local state
+.idea/

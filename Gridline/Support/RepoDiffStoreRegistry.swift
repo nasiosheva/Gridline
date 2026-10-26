@@ -52,4 +52,16 @@ final class RepoDiffStoreRegistry: ObservableObject {
             }
         }
     }
+
+    /// Dipanggil saat aplikasi kembali aktif (lihat `GridlineAppDelegate`).
+    /// Polling `.git/HEAD` milik `GitMetadataWatcher` bisa tertahan App Nap
+    /// saat Gridline di background, jadi branch yang diubah dari IDE/terminal
+    /// lain bisa telat terdeteksi — refresh paksa di sini menyamakannya lagi
+    /// begitu pengguna kembali melihat jendela, tanpa menambah polling baru.
+    func refreshVisibleGitMetadata() {
+        stores.forEach { repoID, store in
+            guard visibleRepoIDs.contains(repoID) else { return }
+            store.refreshGitMetadata()
+        }
+    }
 }

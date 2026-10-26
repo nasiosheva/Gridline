@@ -46,6 +46,7 @@ struct GridlineApp: App {
                 .environmentObject(topAreaStoreRegistry)
                 .task {
                     appDelegate.sessionStore = sessionStore
+                    appDelegate.diffStoreRegistry = diffStoreRegistry
                 }
         }
         .commands {
@@ -204,9 +205,17 @@ struct GridlineApp: App {
 @MainActor
 final class GridlineAppDelegate: NSObject, NSApplicationDelegate {
     weak var sessionStore: RepoSessionStore?
+    weak var diffStoreRegistry: RepoDiffStoreRegistry?
 
     func applicationWillTerminate(_ notification: Notification) {
         sessionStore?.terminateAllProcesses()
+    }
+
+    /// Branch/status bisa berubah dari IDE atau terminal lain selagi Gridline
+    /// di background, dan polling `.git/HEAD` internal (`GitMetadataWatcher`)
+    /// bisa tertahan App Nap saat itu — samakan lagi begitu jendela aktif.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        diffStoreRegistry?.refreshVisibleGitMetadata()
     }
 }
 
