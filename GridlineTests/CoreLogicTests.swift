@@ -1554,6 +1554,109 @@ final class ZeroCoverageViewTests: XCTestCase {
 }
 
 @MainActor
+final class NestedPaneSplitViewTests: XCTestCase {
+    func testRootControllerBuildsBalancedGridAndUpdatesVisibleHostsInPlace() {
+        let paneIDs = (0..<4).map { _ in UUID() }
+        let items = paneIDs.enumerated().map { index, id in
+            PaneGridItem(id: id, content: AnyView(Text("Pane \(index)")))
+        }
+        let coordinator = NestedPaneSplitView(
+            items: [],
+            retainedPaneIDs: [],
+            dividerFractions: [:],
+            onDividerChanged: { _, _ in }
+        ).makeCoordinator()
+        let controller = PaneGridRootViewController()
+        controller.loadViewIfNeeded()
+        controller.view.frame = NSRect(x: 0, y: 0, width: 1_600, height: 1_000)
+
+        controller.update(items: items, retainedPaneIDs: paneIDs, coordinator: coordinator)
+        controller.view.layoutSubtreeIfNeeded()
+
+        let initialSplitControllers = splitControllers(in: controller)
+        XCTAssertEqual(initialSplitControllers.filter { $0.splitView.isVertical }.count, 2)
+        XCTAssertEqual(initialSplitControllers.filter { !$0.splitView.isVertical }.count, 1)
+        XCTAssertEqual(hostingControllerCount(in: controller), 4)
+        let existingGridController = controller.children.first
+
+        let updatedItems = paneIDs.enumerated().map { index, id in
+            PaneGridItem(id: id, content: AnyView(Text("Updated pane \(index)")))
+        }
+        controller.update(items: updatedItems, retainedPaneIDs: paneIDs, coordinator: coordinator)
+
+        XCTAssertTrue(controller.children.first === existingGridController)
+        controller.applyDividerFractions([
+            .columns(row: 0): [0.35],
+            .columns(row: 1): [0.65],
+            .rows: [0.55],
+        ])
+        controller.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(hostingControllerCount(in: controller), 4)
+
+        controller.update(items: [updatedItems[0]], retainedPaneIDs: paneIDs, coordinator: coordinator)
+        controller.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(splitControllers(in: controller).isEmpty)
+        XCTAssertEqual(hostingControllerCount(in: controller), 1)
+
+        controller.update(items: updatedItems, retainedPaneIDs: paneIDs, coordinator: coordinator)
+        controller.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(splitControllers(in: controller).count, 3)
+        XCTAssertEqual(hostingControllerCount(in: controller), 4)
+    }
+
+    func testCoordinatorReportsFractionsAndRemovesResizeObservers() async {
+        let report = expectation(description: "split fraction is reported")
+        var changes: [(PaneDividerRole, [CGFloat])] = []
+        let coordinator = NestedPaneSplitView(
+            items: [],
+            retainedPaneIDs: [],
+            dividerFractions: [:],
+            onDividerChanged: { role, fractions in
+                changes.append((role, fractions))
+                report.fulfill()
+            }
+        ).makeCoordinator()
+        let splitView = NSSplitView(frame: NSRect(x: 0, y: 0, width: 100, height: 80))
+        splitView.isVertical = true
+        let left = NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 80))
+        let right = NSView(frame: NSRect(x: 40, y: 0, width: 60, height: 80))
+        splitView.addSubview(left)
+        splitView.addSubview(right)
+        left.frame = NSRect(x: 0, y: 0, width: 40, height: 80)
+        right.frame = NSRect(x: 40, y: 0, width: 60, height: 80)
+
+        coordinator.observe([(splitView, .columns(row: 0))])
+        NotificationCenter.default.post(name: NSSplitView.didResizeSubviewsNotification, object: splitView)
+
+        await fulfillment(of: [report], timeout: 2)
+        XCTAssertEqual(changes.count, 1)
+        XCTAssertEqual(changes.first?.0, .columns(row: 0))
+        XCTAssertEqual(changes.first?.1, [0.4])
+
+        coordinator.stopObserving()
+        NotificationCenter.default.post(name: NSSplitView.didResizeSubviewsNotification, object: splitView)
+        try? await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(changes.count, 1)
+    }
+
+    private func splitControllers(in root: NSViewController) -> [NSSplitViewController] {
+        var result: [NSSplitViewController] = []
+        if let splitController = root as? NSSplitViewController {
+            result.append(splitController)
+        }
+        for child in root.children {
+            result.append(contentsOf: splitControllers(in: child))
+        }
+        return result
+    }
+
+    private func hostingControllerCount(in root: NSViewController) -> Int {
+        (root is NSHostingController<AnyView> ? 1 : 0)
+            + root.children.reduce(0) { $0 + hostingControllerCount(in: $1) }
+    }
+}
+
+@MainActor
 private final class TemporaryTestDirectory {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("GridlineCoreTests-\(UUID().uuidString)", isDirectory: true)

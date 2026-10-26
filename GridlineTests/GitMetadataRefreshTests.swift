@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 @testable import Gridline
 
@@ -163,6 +165,115 @@ final class GitPullServiceTests: XCTestCase {
         try Data("upstream change\n".utf8).write(to: updater.url.appendingPathComponent("tracked.txt"))
         try updater.git("commit", "--quiet", "-am", "upstream change")
         try updater.git("push", "origin", "main")
+    }
+}
+
+@MainActor
+final class WorktreeBranchPickerModelTests: XCTestCase {
+    func testViewMountsLoadingEmptyAndNoSearchResultsStates() async throws {
+        let emptyRepository = try TemporaryGitRepository()
+        let appState = AppStateStore(fileURL: emptyRepository.url.appendingPathComponent("test-state.json"))
+        let loadingModel = WorktreeBranchPickerModel()
+        mountPicker(loadingModel, repo: Repo(path: emptyRepository.url.path), appState: appState)
+
+        let emptyModel = WorktreeBranchPickerModel()
+        await emptyModel.loadBranches(at: emptyRepository.url.path)
+        XCTAssertTrue(emptyModel.availableBranches.isEmpty)
+        mountPicker(emptyModel, repo: Repo(path: emptyRepository.url.path), appState: appState)
+
+        try emptyRepository.git("branch", "feature/picker-test")
+        let searchModel = WorktreeBranchPickerModel()
+        await searchModel.loadBranches(at: emptyRepository.url.path)
+        searchModel.searchText = "no matching branch"
+        XCTAssertTrue(searchModel.filteredBranches(searchText: searchModel.searchText).isEmpty)
+        mountPicker(searchModel, repo: Repo(path: emptyRepository.url.path), appState: appState)
+    }
+
+    func testLoadsFiltersAndOpensAnExistingWorktree() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("branch", "feature/picker-test")
+        let worktreePath = repository.url.appendingPathComponent("existing-worktree", isDirectory: true)
+        try repository.git("worktree", "add", "--quiet", worktreePath.path, "feature/picker-test")
+
+        let appState = AppStateStore(fileURL: repository.url.appendingPathComponent("test-state.json"))
+        let sourceRepo = Repo(path: repository.url.path)
+        let model = WorktreeBranchPickerModel()
+
+        await model.loadBranches(at: repository.url.path)
+
+        XCTAssertFalse(model.isLoading)
+        XCTAssertEqual(model.currentBranch, "main")
+        XCTAssertEqual(model.availableBranches, ["feature/picker-test"])
+        XCTAssertEqual(model.filteredBranches(searchText: "PICKER"), ["feature/picker-test"])
+        XCTAssertEqual(model.filteredBranches(searchText: "missing"), [])
+        let didOpen = await model.open(branch: "feature/picker-test", from: sourceRepo, appState: appState)
+        XCTAssertTrue(didOpen)
+
+        let openedRepo = try XCTUnwrap(appState.state.savedRepos.first { $0.path == worktreePath.standardizedFileURL.path })
+        XCTAssertEqual(openedRepo.worktreeBranch, "feature/picker-test")
+        XCTAssertEqual(openedRepo.worktreeSourceRepoID, sourceRepo.id)
+        XCTAssertEqual(openedRepo.worktreeBaseBranch, "main")
+        XCTAssertNil(model.openingBranch)
+    }
+
+    func testLoadAndOpenFailuresCanBeCleared() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GridlineInvalidWorktreePicker-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let appState = AppStateStore(fileURL: directory.appendingPathComponent("state.json"))
+        let model = WorktreeBranchPickerModel()
+
+        await model.loadBranches(at: directory.path)
+        XCTAssertFalse(model.isLoading)
+        XCTAssertEqual(model.errorMessage, String(localized: L10n.Worktree.loadFailed))
+        model.clearError()
+        XCTAssertNil(model.errorMessage)
+
+        let didOpen = await model.open(branch: "missing", from: Repo(path: directory.path), appState: appState)
+        XCTAssertFalse(didOpen)
+        XCTAssertFalse(model.errorMessage?.isEmpty ?? true)
+        XCTAssertNil(model.openingBranch)
+    }
+
+    func testUnavailableReplacementPaneReportsFailure() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("branch", "feature/picker-test")
+        let worktreePath = repository.url.appendingPathComponent("existing-worktree", isDirectory: true)
+        try repository.git("worktree", "add", "--quiet", worktreePath.path, "feature/picker-test")
+        let appState = AppStateStore(fileURL: repository.url.appendingPathComponent("test-state.json"))
+        let model = WorktreeBranchPickerModel()
+
+        await model.loadBranches(at: repository.url.path)
+        let didOpen = await model.open(
+            branch: "feature/picker-test",
+            from: Repo(path: repository.url.path),
+            appState: appState,
+            replacingPaneID: UUID()
+        )
+        XCTAssertFalse(didOpen)
+        XCTAssertEqual(model.errorMessage, String(localized: L10n.Worktree.paneUnavailable))
+    }
+
+    func testGitWorktreeErrorsMapToUserMessages() {
+        XCTAssertTrue(WorktreeBranchPickerModel.message(for: .commandFailed("git error")).contains("git error"))
+        XCTAssertFalse(WorktreeBranchPickerModel.message(for: .commandFailed("")).isEmpty)
+        XCTAssertEqual(
+            WorktreeBranchPickerModel.message(for: .pathAlreadyExists),
+            String(localized: L10n.Worktree.pathAlreadyExists)
+        )
+    }
+
+    private func mountPicker(_ model: WorktreeBranchPickerModel, repo: Repo, appState: AppStateStore) {
+        let hostingView = NSHostingView(rootView: WorktreeBranchPickerView(
+            repo: repo,
+            replacingPaneID: nil,
+            model: model
+        ).environmentObject(appState))
+        hostingView.frame = NSRect(x: 0, y: 0, width: 420, height: 380)
+        hostingView.layoutSubtreeIfNeeded()
+        hostingView.displayIfNeeded()
+        XCTAssertFalse(hostingView.subviews.isEmpty)
     }
 }
 

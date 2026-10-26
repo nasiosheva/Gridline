@@ -1,25 +1,22 @@
+import Combine
 import SwiftUI
 
 struct WorktreeBranchPickerView: View {
     let repo: Repo
-    var replacingPaneID: UUID? = nil
+    let replacingPaneID: UUID?
 
     @EnvironmentObject private var appState: AppStateStore
     @Environment(\.dismiss) private var dismiss
-    @State private var branches: [String] = []
-    @State private var currentBranch: String?
-    @State private var searchText = ""
-    @State private var isLoading = true
-    @State private var openingBranch: String?
-    @State private var errorMessage: String?
+    @StateObject private var model: WorktreeBranchPickerModel
 
-    private var availableBranches: [String] {
-        branches.filter { $0 != currentBranch }
+    init(repo: Repo, replacingPaneID: UUID? = nil) {
+        self.init(repo: repo, replacingPaneID: replacingPaneID, model: WorktreeBranchPickerModel())
     }
 
-    private var filteredBranches: [String] {
-        guard !searchText.isEmpty else { return availableBranches }
-        return availableBranches.filter { $0.localizedCaseInsensitiveContains(searchText) }
+    init(repo: Repo, replacingPaneID: UUID?, model: WorktreeBranchPickerModel) {
+        self.repo = repo
+        self.replacingPaneID = replacingPaneID
+        _model = StateObject(wrappedValue: model)
     }
 
     var body: some View {
@@ -28,10 +25,10 @@ struct WorktreeBranchPickerView: View {
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if isLoading {
+            if model.isLoading {
                 ProgressView(L10n.Worktree.loadingBranches)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if availableBranches.isEmpty {
+            } else if model.availableBranches.isEmpty {
                 ContentUnavailableView(
                     String(localized: L10n.Worktree.noOtherBranches),
                     systemImage: "arrow.triangle.branch"
@@ -42,11 +39,11 @@ struct WorktreeBranchPickerView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(.secondary)
-                        TextField(L10n.Common.searchBranches, text: $searchText)
+                        TextField(L10n.Common.searchBranches, text: $model.searchText)
                             .textFieldStyle(.plain)
-                        if !searchText.isEmpty {
+                        if !model.searchText.isEmpty {
                             Button {
-                                searchText = ""
+                                model.searchText = ""
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                             }
@@ -55,21 +52,30 @@ struct WorktreeBranchPickerView: View {
                             .accessibilityLabel(L10n.Common.clearSearch)
                         }
                     }
-                    if filteredBranches.isEmpty {
+                    if model.filteredBranches(searchText: model.searchText).isEmpty {
                         ContentUnavailableView(
                             String(localized: L10n.Common.noMatchingBranches),
                             systemImage: "magnifyingglass"
                         )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
-                        List(filteredBranches, id: \.self) { branch in
+                        List(model.filteredBranches(searchText: model.searchText), id: \.self) { branch in
                             Button {
-                                open(branch)
+                                Task {
+                                    if await model.open(
+                                        branch: branch,
+                                        from: repo,
+                                        appState: appState,
+                                        replacingPaneID: replacingPaneID
+                                    ) {
+                                        dismiss()
+                                    }
+                                }
                             } label: {
                                 HStack {
                                     Label(branch, systemImage: "arrow.triangle.branch")
                                     Spacer()
-                                    if openingBranch == branch {
+                                    if model.openingBranch == branch {
                                         ProgressView()
                                             .controlSize(.small)
                                     }
@@ -77,7 +83,7 @@ struct WorktreeBranchPickerView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .disabled(openingBranch != nil)
+                            .disabled(model.openingBranch != nil)
                         }
                         .listStyle(.inset)
                     }
@@ -94,24 +100,41 @@ struct WorktreeBranchPickerView: View {
         }
         .padding(16)
         .frame(width: 420, height: 380)
-        .task {
-            await loadBranches()
-        }
+        .task { await model.loadBranches(at: repo.path) }
         .onAppear {
-            searchText = ""
+            model.searchText = ""
         }
         .alert(String(localized: L10n.Worktree.alertTitle), isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            get: { model.errorMessage != nil },
+            set: { if !$0 { model.clearError() } }
         )) {
             Button(L10n.Common.ok, role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "")
+            Text(model.errorMessage ?? "")
         }
     }
+}
 
-    private func loadBranches() async {
-        guard let choices = await GitWorktreeService.branchChoices(at: repo.path) else {
+@MainActor
+final class WorktreeBranchPickerModel: ObservableObject {
+    @Published private(set) var branches: [String] = []
+    @Published private(set) var currentBranch: String?
+    @Published private(set) var isLoading = true
+    @Published private(set) var openingBranch: String?
+    @Published private(set) var errorMessage: String?
+    @Published var searchText = ""
+
+    var availableBranches: [String] {
+        branches.filter { $0 != currentBranch }
+    }
+
+    func filteredBranches(searchText: String) -> [String] {
+        guard !searchText.isEmpty else { return availableBranches }
+        return availableBranches.filter { $0.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    func loadBranches(at repoPath: String) async {
+        guard let choices = await GitWorktreeService.branchChoices(at: repoPath) else {
             isLoading = false
             errorMessage = String(localized: L10n.Worktree.loadFailed)
             return
@@ -121,36 +144,44 @@ struct WorktreeBranchPickerView: View {
         isLoading = false
     }
 
-    private func open(_ branch: String) {
-        Task { @MainActor in
-            openingBranch = branch
-            defer { openingBranch = nil }
-            do {
-                let destination = try await GitWorktreeService.openOrCreateWorktree(
-                    branch: branch,
-                    from: repo
-                )
-                guard appState.openRepoInNewPane(
-                    path: destination.path,
-                    displayName: destination.displayName,
-                    sourceRepoID: destination.sourceRepoID,
-                    branch: destination.branch,
-                    baseBranch: currentBranch,
-                    replacingPaneID: replacingPaneID
-                ) else {
-                    errorMessage = String(localized: L10n.Worktree.paneUnavailable)
-                    return
-                }
-                dismiss()
-            } catch let error as GitWorktreeError {
-                errorMessage = message(for: error)
-            } catch {
-                errorMessage = error.localizedDescription
+    func open(
+        branch: String,
+        from repo: Repo,
+        appState: AppStateStore,
+        replacingPaneID: UUID? = nil
+    ) async -> Bool {
+        openingBranch = branch
+        defer { openingBranch = nil }
+        do {
+            let destination = try await GitWorktreeService.openOrCreateWorktree(
+                branch: branch,
+                from: repo
+            )
+            guard appState.openRepoInNewPane(
+                path: destination.path,
+                displayName: destination.displayName,
+                sourceRepoID: destination.sourceRepoID,
+                branch: destination.branch,
+                baseBranch: currentBranch,
+                replacingPaneID: replacingPaneID
+            ) else {
+                errorMessage = String(localized: L10n.Worktree.paneUnavailable)
+                return false
             }
+            return true
+        } catch let error as GitWorktreeError {
+            errorMessage = Self.message(for: error)
+        } catch {
+            errorMessage = error.localizedDescription
         }
+        return false
     }
 
-    private func message(for error: GitWorktreeError) -> String {
+    func clearError() {
+        errorMessage = nil
+    }
+
+    static func message(for error: GitWorktreeError) -> String {
         switch error {
         case .commandFailed(let detail):
             let detail = detail.isEmpty ? String(localized: L10n.Worktree.loadFailed) : detail
