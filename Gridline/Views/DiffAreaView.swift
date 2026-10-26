@@ -120,6 +120,14 @@ final class DiffColumnCountCache {
 /// memakai `rawText` yang sama seperti `DiffColumnCountCache` supaya tidak
 /// dihitung ulang di setiap render selama isi diff tidak berubah.
 final class WordDiffHighlightCache {
+    /// Batas jumlah pasangan baris hapus/tambah yang diberi word-diff per
+    /// file — `WordDiffPolicy` sudah membatasi biaya per baris (`maxTokens`),
+    /// tapi file dengan ribuan baris berubah (refactor besar, file generated)
+    /// tetap bisa membuat total perhitungan memblokir main thread saat ganti
+    /// file/branch. Pasangan di luar batas ini tidak diberi highlight kata,
+    /// kembali ke tampilan warna baris biasa seperti sebelum fitur ini ada.
+    private static let maxPairsPerFile = 2000
+
     private var rawText: String?
     private var highlightsByLineID: [DiffLine.ID: [Range<Int>]] = [:]
 
@@ -132,10 +140,13 @@ final class WordDiffHighlightCache {
 
     private static func compute(for diff: FileDiff) -> [DiffLine.ID: [Range<Int>]] {
         var result: [DiffLine.ID: [Range<Int>]] = [:]
+        var processedPairs = 0
         for hunk in diff.hunks {
             for pair in DiffLinePairingPolicy.pairs(in: hunk.lines) {
                 guard let oldLine = pair.0, let newLine = pair.1,
                       oldLine.kind == .deletion, newLine.kind == .addition else { continue }
+                guard processedPairs < maxPairsPerFile else { continue }
+                processedPairs += 1
                 let changed = WordDiffPolicy.changedRanges(old: oldLine.text, new: newLine.text)
                 result[oldLine.id] = changed.old
                 result[newLine.id] = changed.new
