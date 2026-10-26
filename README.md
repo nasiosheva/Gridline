@@ -13,6 +13,7 @@ Gridline is a native macOS workspace for reviewing and working across several Gi
 - Search branches while choosing a comparison or worktree; restore a missing worktree by choosing a branch from its source repository.
 - Keep each repository's last diff branch comparison when reopening the app.
 - Update the displayed branch after a Git checkout while the app stays open.
+- Pull upstream commits from the behind indicator after confirmation; the action only fast-forwards and refreshes repository status afterward.
 - Prefer panes with an open repository when reducing the layout, while keeping the active repository when possible.
 - Show repositories in a scrollable multi-row grid; pane view choices grow with the repositories saved in Gridline.
 - Close a pane directly with its top-right X button while keeping its repository terminal session available.
@@ -31,7 +32,14 @@ Gridline is a native macOS workspace for reviewing and working across several Gi
 
 Gridline pauses file and diff watchers for panes that are not visible while keeping terminal sessions alive. Large diffs and file lists load incrementally to keep scrolling responsive.
 
-Gridline's Git status and diff views are read-only. Actions such as staging changes are copied as commands for the user to run in the terminal.
+## Code organization
+
+- `Gridline/Core/Models` contains domain models; `Gridline/Core/Policies` contains pure reusable domain rules.
+- `Gridline/Reusable` contains small stateless helpers shared across app layers.
+- Runtime session state stays in `Gridline/Models`, integrations and side effects in `Gridline/Support`, and presentation in `Gridline/Views`.
+- These folders are organized within the existing Xcode app target; they do not add a separate package or build target.
+
+Gridline's Git status and diff views are read-only. Pull is the only direct Git write action: it requires confirmation and uses fast-forward-only behavior. Actions such as staging changes are copied as commands for the user to run in the terminal.
 
 ## Requirements
 
@@ -64,7 +72,7 @@ Gridline stores repository paths and workspace layout in:
 ~/Library/Application Support/Gridline/state.json
 ```
 
-App Sandbox is disabled so Gridline can launch the user's shell and run read-only Git commands in selected folders. Terminal commands are entered and controlled by the user.
+App Sandbox is disabled so Gridline can launch the user's shell and run Git commands in selected folders. Terminal commands are entered and controlled by the user.
 
 ## Languages
 

@@ -11,12 +11,29 @@ import SwiftUI
 @main
 struct GridlineApp: App {
     @NSApplicationDelegateAdaptor(GridlineAppDelegate.self) private var appDelegate
-    @StateObject private var appState = AppStateStore()
-    @StateObject private var sessionStore = RepoSessionStore()
-    @StateObject private var diffStoreRegistry = RepoDiffStoreRegistry()
-    @StateObject private var topAreaStoreRegistry = TopAreaStoreRegistry()
+    @StateObject private var appState: AppStateStore
+    @StateObject private var sessionStore: RepoSessionStore
+    @StateObject private var diffStoreRegistry: RepoDiffStoreRegistry
+    @StateObject private var topAreaStoreRegistry: TopAreaStoreRegistry
 
     init() {
+        let appState = AppStateStore()
+        let sessionStore = RepoSessionStore()
+        let diffStoreRegistry = RepoDiffStoreRegistry()
+        let topAreaStoreRegistry = TopAreaStoreRegistry()
+
+        diffStoreRegistry.onWorktreeBaseBranchConsumed = { repoID in
+            appState.consumeWorktreeBaseBranch(for: repoID)
+        }
+        diffStoreRegistry.onComparisonSelectionChanged = { repoID, selection in
+            appState.setDiffComparisonSelection(selection, for: repoID)
+        }
+
+        _appState = StateObject(wrappedValue: appState)
+        _sessionStore = StateObject(wrappedValue: sessionStore)
+        _diffStoreRegistry = StateObject(wrappedValue: diffStoreRegistry)
+        _topAreaStoreRegistry = StateObject(wrappedValue: topAreaStoreRegistry)
+
         DiagnosticLog.shared.record(.appLaunched)
     }
 

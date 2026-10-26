@@ -12,16 +12,11 @@ enum DiffChangeGroup: String, CaseIterable, Identifiable {
     case staged
     case unstaged
     case untracked
+    /// Hanya terisi saat pengguna menyalakan "Show Ignored Files" — defaultnya
+    /// tidak diambil sama sekali (lihat `GitDiffService.statusSnapshot`).
+    case ignored
 
     var id: String { rawValue }
-
-    var label: LocalizedStringResource {
-        switch self {
-        case .staged: return L10n.Diff.staged
-        case .unstaged: return L10n.Diff.unstaged
-        case .untracked: return L10n.Diff.untracked
-        }
-    }
 }
 
 enum DiffFileStatus: Equatable {
@@ -33,6 +28,7 @@ enum DiffFileStatus: Equatable {
     case untracked
     case unmerged
     case typeChanged
+    case ignored
 
     var letter: String {
         switch self {
@@ -44,6 +40,7 @@ enum DiffFileStatus: Equatable {
         case .untracked: return "U"
         case .unmerged: return "!"
         case .typeChanged: return "T"
+        case .ignored: return "I"
         }
     }
 }
@@ -60,25 +57,6 @@ struct DiffFileEntry: Identifiable, Equatable {
 
     var displayName: String {
         (path as NSString).lastPathComponent
-    }
-}
-
-enum DiffVisibilityPolicy {
-    static let recentChangeWindow: TimeInterval = 10 * 60
-    static let largeFileByteLimit: Int64 = 1_000_000
-    static let largeChangeLineLimit = 2_000
-
-    static func isRecent(_ entry: DiffFileEntry, now: Date = .now) -> Bool {
-        guard let modificationDate = entry.modificationDate else { return false }
-        return modificationDate >= now.addingTimeInterval(-recentChangeWindow)
-    }
-
-    static func isLarge(_ entry: DiffFileEntry) -> Bool {
-        if let fileSizeBytes = entry.fileSizeBytes, fileSizeBytes >= largeFileByteLimit {
-            return true
-        }
-        let changedLines = (entry.additions ?? 0) + (entry.deletions ?? 0)
-        return changedLines >= largeChangeLineLimit
     }
 }
 

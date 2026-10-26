@@ -11,7 +11,7 @@ Legenda: `[x]` selesai dan sudah diverifikasi build sukses · `[~]` sedang diker
 ## M1 — Satu repo, satu pane, dan terminal
 
 - [x] **1. Proyek Xcode, jendela utama, penyimpanan repo sebagai path, izin TCC**
-  - `Gridline/Models/Repo.swift`, `Gridline/Support/AppStateStore.swift`, `Gridline/Support/RepoOpener.swift`, `Gridline/Support/TCCPermission.swift`
+  - `Gridline/Core/Models/Repo.swift`, `Gridline/Support/AppStateStore.swift`, `Gridline/Support/RepoOpener.swift`, `Gridline/Support/TCCPermission.swift`
   - Sandbox dimatikan di `project.pbxproj` (`ENABLE_APP_SANDBOX = NO`, `ENABLE_HARDENED_RUNTIME = YES`) sesuai D16.
 - [x] **2. Satu pane dengan header (nama, branch, ahead/behind), area diff, area terminal**
   - `Gridline/Views/RepoPaneView.swift`, `Gridline/Views/RepoPaneHeaderView.swift`, `Gridline/Support/GitService.swift`
@@ -19,7 +19,7 @@ Legenda: `[x]` selesai dan sudah diverifikasi build sukses · `[~]` sedang diker
   - `Gridline/Models/TerminalTab.swift`, `Gridline/Models/RepoSession.swift`, `Gridline/Support/RepoSessionStore.swift`, `Gridline/Views/TerminalHostView.swift`, `Gridline/Views/TerminalAreaView.swift`
   - Dependency SPM: SwiftTerm 1.20.0 (dipin — versi 1.99.x butuh plugin build tambahan, lihat catatan di bawah).
 - [x] **4. Panel diff (`git status`/`git diff` + FSEvents)**
-  - `Gridline/Models/DiffModels.swift`, `Gridline/Support/GitProcess.swift`, `Gridline/Support/GitDiffService.swift`, `Gridline/Support/RepoFileWatcher.swift`, `Gridline/Models/RepoDiffStore.swift`, `Gridline/Support/RepoDiffStoreRegistry.swift`, `Gridline/Views/DiffAreaView.swift`
+  - `Gridline/Core/Models/DiffModels.swift`, `Gridline/Core/Policies/DiffVisibilityPolicy.swift`, `Gridline/Support/GitProcess.swift`, `Gridline/Support/GitDiffService.swift`, `Gridline/Support/RepoFileWatcher.swift`, `Gridline/Models/RepoDiffStore.swift`, `Gridline/Support/RepoDiffStoreRegistry.swift`, `Gridline/Views/DiffAreaView.swift`
   - Bug off-by-one di parsing rename/copy (`"2 "` porcelain v2) ditemukan lewat code review dan sudah diperbaiki.
 - [x] **5. Persistensi dasar (daftar repo, posisi pembagi, satu tab terminal saat restart)**
   - `AppState.paneSplitTopFraction` di `AppStateStore.swift`, `Gridline/Views/PersistedVSplit.swift`, `Gridline/Support/WindowConfigurator.swift`
@@ -54,7 +54,7 @@ Legenda: `[x]` selesai dan sudah diverifikasi build sukses · `[~]` sedang diker
 - [x] **9. Tombol "Salin perintah" di panel diff, salin diff, salin path**
   - `Gridline/Support/Clipboard.swift` (baru): `NSPasteboard.copyString(_:)`, dipakai di semua titik salin (termasuk refactor "Salin Path" viewer yang sudah ada di `FileViewerContentView.swift`).
   - `Gridline/Support/GitDiffService.swift`: `toggleStageCommand(for:)` — `git add <path>` untuk unstaged/untracked, `git restore --staged <path>` untuk staged (path di-quote shell-safe). Apps tidak menjalankan ini sendiri, hanya menyalin ke clipboard (bagian 17a apps-spec.md).
-  - `Gridline/Models/DiffModels.swift`: `FileDiff` dapat field `rawText` (output `git diff` mentah) supaya "Salin Diff" identik dengan yang Git tampilkan, bukan rekonstruksi dari `hunks` yang sudah di-parse.
+  - `Gridline/Core/Models/DiffModels.swift`: `FileDiff` dapat field `rawText` (output `git diff` mentah) supaya "Salin Diff" identik dengan yang Git tampilkan, bukan rekonstruksi dari `hunks` yang sudah di-parse.
   - `Gridline/Views/DiffAreaView.swift`: context menu klik-kanan per baris file ("Salin Path", "Salin Perintah") di `DiffFileRow`, plus tombol toolbar "Salin Path"/"Salin Perintah"/"Salin Diff" di `DiffContentView` untuk file yang sedang dipilih.
   - Build diverifikasi: `BUILD SUCCEEDED`.
 
@@ -235,6 +235,20 @@ Permintaan tambahan 2026-10-25: isi diff sekarang digulir horizontal dan vertika
 
 Perubahan 2026-10-26: saat filter diff menyembunyikan file terpilih, preview kini mengikuti file pertama yang terlihat atau dikosongkan jika tidak ada hasil. Keputusan dicatat sebagai D41 di `DECISIONS.md` dan disinkronkan ke `apps-spec.md`. Build dan verifikasi GUI masih pending.
 
+Permintaan 2026-10-26: branch aktif ditampilkan cyan terang pada header pane; kontrol perbandingan diff menampilkan branch aktif ↔ pembanding atau dasar → target dengan warna kontras. Nama repo diperkuat dengan teks tebal dan latar lembut warna identitasnya. Verifikasi build dan tampilan GUI masih pending.
+
+Permintaan 2026-10-26: tombol panah kiri-kanan di antara nama branch menjadi aksi swap. Pada mode branch aktif dibanding branch pilihan, tombol membalik arah dengan berpindah ke mode dasar → target; pada mode dua branch, tombol menukar dasar dan target. Tombol nama branch tetap membuka picker. Verifikasi build dan tampilan GUI masih pending.
+
+Permintaan 2026-10-26: sembunyikan tab bar area atas ketika belum ada file viewer terbuka agar Diff mendapat ruang vertikal tambahan. Tab bar tetap muncul saat file viewer tersedia. Build dan test tidak dijalankan.
+
+Perbaikan persistensi 2026-10-26: callback simpan/pulihkan pilihan branch dipasang di composition root sebelum view dapat membuat store diff; tidak ada lagi replay state tertunda dari `didSet`. Build dan test tidak dijalankan.
+
+Hardening state 2026-10-26: hapus force unwrap lokasi Application Support, pastikan direktori tersedia saat persist, gunakan `Data.write(.atomic)` langsung, dan catat kegagalan tulis/encode di diagnostics. Build dan test tidak dijalankan.
+
+Pemisahan tanggung jawab 2026-10-26: pindahkan model domain ke `Core/Models`, kebijakan diff ke `Core/Policies`, helper clamp generik ke `Reusable`, dan lokalisasi label keluar dari model. Tetap satu target Xcode. Build dan test tidak dijalankan.
+
+Permintaan 2026-10-26: indikator behind menjadi aksi Pull yang meminta konfirmasi, menjalankan `git pull --ff-only`, menampilkan progres/hasil, dan memuat ulang status repo. Branch yang divergen tidak di-merge otomatis. Keputusan D42 dan batas Git read-only diperbarui; verifikasi build dan GUI masih pending.
+
 Uji GUI terminal 2026-10-25: build Debug terbaru dibuka dengan empat pane. Tab uji sementara menghasilkan 10.000 baris `seq` dan 2.000 baris output bertahap; scrollbar bisa berpindah ke tengah riwayat dan input gulir kecil mengubah posisi secara konsisten. Saat output bertahap dan posisi riwayat ditahan, dua tangkapan layar menunjukkan area terminal kosong meski scrollbar tetap di posisi yang sama; teks tampil lagi setelah scrollbar digerakkan. Kelancaran frame dan penggunaan CPU belum diukur, sehingga terminal belum bisa dinyatakan sepenuhnya smooth. Tab uji ditutup dan tampilan empat pane dipulihkan.
 
 Uji khusus scrollback terminal 2026-10-25: build Debug Xcode berhasil. Uji output bertahap sambil viewport ditahan di tengah riwayat tetap mereproduksi area terminal kosong pada beberapa tangkapan layar; menggerakkan scrollbar menggambar teks kembali. Pengaman invalidasi penuh dan `displayIfNeeded()` yang dikoaleskan tidak menghilangkan gejala, jadi perubahan itu dibuang. Tab uji ditutup dan hanya satu shell idle yang tersisa. Temuan render masih terbuka untuk penelusuran SwiftTerm/runtime lebih lanjut.
@@ -242,3 +256,9 @@ Uji khusus scrollback terminal 2026-10-25: build Debug Xcode berhasil. Uji outpu
 Uji scrollback lanjutan: redraw yang dijadwalkan setelah callback scroll dan renderer Metal juga tidak mencegah area kosong saat stream berlanjut. Kedua percobaan dibuang; build Xcode berhasil dengan percobaan callback sebelum dibuang. Reproduksi terkontrol dengan 180 baris bertahap masih terjadi dan pulih setelah Page Up. Dua tab uji ditutup, tersisa satu shell idle. Fix render belum terkonfirmasi.
 
 Percobaan `terminal.updateFullScreen()` setelah scrollback juga tidak mengatasi layar kosong. Patch dibuang setelah reproduksi ulang; build Xcode berhasil saat percobaan dipasang. Kode terminal tetap pada baseline dan tab uji ditutup.
+
+Permintaan 2026-10-26: highlight word-level ditambahkan pada baris diff yang diedit (pasangan hapus/tambah), lewat `WordDiffPolicy` (LCS murni, Core/Policies) dan `DiffLinePairingPolicy` yang diekstrak dari logika pairing mode split lama. Hasil di-cache per `diff.rawText` lewat `WordDiffHighlightCache`, dirender satu `Text(AttributedString)` per baris. Menu tampilan daftar file ditambahkan (Tree/List/Combined List + Hide Untracked Files/Show Ignored Files), termasuk grup `DiffChangeGroup.ignored` baru dan `GitDiffService.statusSnapshot(includeIgnored:)` yang memakai `git status --ignored` mode traditional (bukan matching) demi performa pada direktori besar seperti node_modules. Build dan 85 unit test lolos.
+
+Perbaikan review kode 2026-10-26: `RepoDiffStore.refresh()` kini melacak task aktifnya sehingga pemanggil bersamaan (termasuk `pullFromUpstream()`) menunggu refresh benar-benar selesai, bukan langsung kembali saat refresh lain berjalan. `performPull()` memberi feedback "Pull Skipped" bila kondisi berubah sebelum pull sempat jalan, state alur pull digabung jadi satu enum `PullFlow`. Warna perbandingan dua branch disamakan (cyan/cyan) sesuai `apps-spec.md`; `branchPickerButton` mendapat accessibility label. `AppStateStore.persist()` hanya membuat direktori sekali, bukan tiap simpan; `RepoOpener` memvalidasi path lewat `Repo.isGitRepository(atPath:)` murni tanpa mengalokasikan `Repo` acak. Build dan 85 unit test lolos.
+
+Permintaan 2026-10-26: mode split dihapus total dari panel diff — isi diff sekarang hanya unified (satu kolom). `DiffViewMode`, `SplitDiffLinesView`/`SplitDiffRow`, toolbar picker mode, dan string lokalisasi terkait (`diff.mode`/`diff.split_mode`/`diff.unified_mode`) dihapus; `DiffTextLayout.columnWidth` dan `DiffFontMetrics.layout(mode:)` disederhanakan karena tidak ada lagi perhitungan dua kolom. `apps-spec.md` bagian 6 dan 11 disinkronkan (catatan mode split/unified dan setting default dihapus). Build berhasil; test belum dijalankan ulang untuk perubahan ini.

@@ -17,11 +17,18 @@ enum GitProcess {
         let stderr: String
     }
 
-    static func run(_ arguments: [String], at path: String) async -> Output {
+    static func run(
+        _ arguments: [String],
+        at path: String,
+        environment additionalEnvironment: [String: String] = [:]
+    ) async -> Output {
         await withCheckedContinuation { continuation in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = ["git", "-C", path] + arguments
+            if !additionalEnvironment.isEmpty {
+                process.environment = ProcessInfo.processInfo.environment.merging(additionalEnvironment) { _, newValue in newValue }
+            }
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()

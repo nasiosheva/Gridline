@@ -307,12 +307,6 @@ struct ContentView: View {
     }
 
     private func configureInitialState() {
-        diffStoreRegistry.onWorktreeBaseBranchConsumed = { repoID in
-            appState.consumeWorktreeBaseBranch(for: repoID)
-        }
-        diffStoreRegistry.onComparisonSelectionChanged = { repoID, selection in
-            appState.setDiffComparisonSelection(selection, for: repoID)
-        }
         updateStoreVisibility(refreshExistingDiffStores: true)
         clearAttention(for: layout.activePaneID)
     }

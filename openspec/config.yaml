@@ -14,9 +14,10 @@ context: |
   repo dari pane, memaksimalkan pane, atau memindahkan fokus TIDAK PERNAH
   boleh menghentikan proses terminal yang berjalan.
 
-  Aplikasi bersifat read-only terhadap Git: tidak ada stage/unstage/commit
-  langsung dari UI. Semua pemanggilan Git yang memantau working tree harus
-  pakai `--no-optional-locks` (D8) dan tidak pernah menulis ke `.git`.
+  Status/diff bersifat read-only dan tidak ada stage/unstage/commit langsung
+  dari UI. Aksi Pull dari indikator behind adalah satu-satunya penulisan Git
+  langsung: minta konfirmasi, gunakan `git pull --ff-only`, dan tampilkan
+  progres/hasil. Pemantauan working tree memakai `--no-optional-locks` (D8).
 
   Target: macOS 26+, Apple Silicon (arm64) saja, tanpa App Sandbox (Hardened
   Runtime aktif) karena aplikasi menjalankan shell/git bebas di folder

@@ -142,3 +142,7 @@ Alasan: pintasan diff tidak boleh mengambil alih navigasi terminal, dan fokus vi
 **D41. Filter daftar diff menyaring pilihan dan preview secara bersamaan.**
 Jika file terpilih tidak lolos filter aktif (file baru atau file besar), pilih file pertama yang lolos. Jika tidak ada file yang lolos, kosongkan pilihan dan preview. Perubahan ini menyelaraskan isi panel dengan daftar yang terlihat; pembatalan proses Git yang sudah berjalan tidak dijamin.
 Alasan: menyembunyikan baris tetapi membiarkan preview file tersembunyi membuat hubungan pilihan dan isi panel membingungkan. Pengurangan CPU/RAM perlu diukur terpisah.
+
+**D42. Pull upstream tersedia dari indikator behind dan hanya melakukan fast-forward.**
+Pengguna mengonfirmasi branch/upstream sebelum Gridline menjalankan `git pull --ff-only`. UI menampilkan progres dan hasil, lalu memuat ulang status. Jika branch bercabang, perubahan lokal menghalangi update, atau operasi Git gagal, pull berhenti tanpa membuat merge otomatis atau membuang perubahan. Angka behind pada konfirmasi dapat tertinggal karena status tidak melakukan fetch otomatis.
+Alasan: update branch dari header mengurangi langkah pengguna, sementara fast-forward-only mencegah merge commit atau resolusi konflik yang tak terduga.

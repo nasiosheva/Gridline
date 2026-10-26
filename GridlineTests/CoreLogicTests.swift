@@ -217,6 +217,7 @@ final class DiffModelTests: XCTestCase {
         XCTAssertEqual(DiffFileStatus.untracked.letter, "U")
         XCTAssertEqual(DiffFileStatus.unmerged.letter, "!")
         XCTAssertEqual(DiffFileStatus.typeChanged.letter, "T")
+        XCTAssertEqual(DiffFileStatus.ignored.letter, "I")
 
         let entry = DiffFileEntry(path: "Sources/File.swift", group: .staged, status: .modified)
         XCTAssertEqual(entry.id, "staged:Sources/File.swift")
@@ -228,7 +229,7 @@ final class DiffModelTests: XCTestCase {
         let hunk = DiffHunk(header: "@@ -0,0 +1 @@", lines: [line])
         XCTAssertNotEqual(line.id, UUID())
         XCTAssertNotEqual(hunk.id, UUID())
-        XCTAssertEqual(DiffChangeGroup.allCases.map(\.label).count, 3)
+        XCTAssertEqual(DiffChangeGroup.allCases.map(\.label).count, 4)
     }
 
     func testRecentAndLargePoliciesAtBoundaries() {
@@ -252,8 +253,8 @@ final class DiffModelTests: XCTestCase {
 @MainActor
 final class RepositoryAndShellModelTests: XCTestCase {
     func testDiffGroupsAndRepositoryMetadataRoundTrip() throws {
-        XCTAssertEqual(DiffChangeGroup.allCases.map(\.rawValue), ["staged", "unstaged", "untracked"])
-        XCTAssertEqual(Set(DiffChangeGroup.allCases.map(\.id)), Set(["staged", "unstaged", "untracked"]))
+        XCTAssertEqual(DiffChangeGroup.allCases.map(\.rawValue), ["staged", "unstaged", "untracked", "ignored"])
+        XCTAssertEqual(Set(DiffChangeGroup.allCases.map(\.id)), Set(["staged", "unstaged", "untracked", "ignored"]))
 
         let directory = try TemporaryTestDirectory()
         let gitDirectory = directory.url.appendingPathComponent(".git", isDirectory: true)
@@ -1332,11 +1333,9 @@ final class ZeroCoverageViewTests: XCTestCase {
         XCTAssertEqual(DiffFontMetrics.maximumColumns(in: diff), 10)
         XCTAssertEqual(DiffFontMetrics.gutterWidth(for: GridlinePreferences.defaultDiffFontSize), 36)
 
-        let split = DiffFontMetrics.layout(maximumColumns: 10, mode: .split, fontSize: 14, viewportWidth: 100)
-        let unified = DiffFontMetrics.layout(maximumColumns: 10, mode: .unified, fontSize: 14, viewportWidth: 100)
-        XCTAssertEqual(split.fontSize, 14)
-        XCTAssertGreaterThanOrEqual(split.contentWidth, 100)
-        XCTAssertGreaterThanOrEqual(split.columnWidth, unified.columnWidth)
+        let layout = DiffFontMetrics.layout(maximumColumns: 10, fontSize: 14, viewportWidth: 100)
+        XCTAssertEqual(layout.fontSize, 14)
+        XCTAssertGreaterThanOrEqual(layout.contentWidth, 100)
 
         let cache = DiffColumnCountCache()
         XCTAssertEqual(cache.count(for: diff), 10)

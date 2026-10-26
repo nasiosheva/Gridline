@@ -65,6 +65,11 @@ final class AppStateStore: ObservableObject {
 
     private let fileURL: URL
     private var deferredPersistTask: Task<Void, Never>?
+    /// `persist()` dipanggil sangat sering (fokus pane, drag divider, pilihan
+    /// file) — direktori cuma perlu dibuat sekali, bukan lewat syscall
+    /// `createDirectory` di setiap simpan (CLAUDE.md: minimalkan kerja
+    /// main-thread yang tidak perlu).
+    private var hasEnsuredDirectoryExists = false
 
     init(fileURL: URL? = nil) {
         self.fileURL = fileURL ?? Self.defaultFileURL()
@@ -72,10 +77,14 @@ final class AppStateStore: ObservableObject {
     }
 
     private static func defaultFileURL() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = base.appendingPathComponent("Gridline", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("state.json")
+        let fileManager = FileManager.default
+        let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("Application Support", isDirectory: true)
+        return baseURL
+            .appendingPathComponent("Gridline", isDirectory: true)
+            .appendingPathComponent("state.json")
     }
 
     private static func load(from url: URL) -> AppState? {
@@ -84,18 +93,18 @@ final class AppStateStore: ObservableObject {
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(state) else { return }
-        let dir = fileURL.deletingLastPathComponent()
-        let tempURL = dir.appendingPathComponent(".\(fileURL.lastPathComponent).tmp-\(UUID().uuidString)")
         do {
-            try data.write(to: tempURL, options: .atomic)
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL)
-            } else {
-                try FileManager.default.moveItem(at: tempURL, to: fileURL)
+            let data = try JSONEncoder().encode(state)
+            if !hasEnsuredDirectoryExists {
+                try FileManager.default.createDirectory(
+                    at: fileURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                hasEnsuredDirectoryExists = true
             }
+            try data.write(to: fileURL, options: .atomic)
         } catch {
-            try? FileManager.default.removeItem(at: tempURL)
+            DiagnosticLog.shared.record(.appStatePersistenceFailed((error as NSError).code))
         }
     }
 

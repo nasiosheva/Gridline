@@ -23,6 +23,22 @@ struct RepoPaneHeaderView: View {
     var onToggleMaximize: () -> Void
     var onToggleTerminalOnly: () -> Void
     @State private var showsWorktreePicker = false
+    /// Satu state linear untuk alur pull (confirm → result), bukan beberapa
+    /// Bool independen yang bisa merepresentasikan kombinasi tidak valid
+    /// (mis. alert hasil tampil dengan `pullSucceeded` sisa dari pull sebelumnya).
+    @State private var pullFlow: PullFlow = .idle
+
+    private enum PullFlow: Equatable {
+        case idle
+        case confirming
+        case succeeded
+        case failed
+        /// `pullFromUpstream()` menolak jalan karena kondisi berubah di antara
+        /// dialog konfirmasi dibuka dan pengguna menekan Pull (mis. branch
+        /// sudah up to date lagi) — pengguna tetap diberi tahu, bukan dibiarkan
+        /// tanpa umpan balik sama sekali.
+        case skipped
+    }
 
     var body: some View {
         let status = diffStore.headerStatus
@@ -48,14 +64,23 @@ struct RepoPaneHeaderView: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(repo.name)
-                        .font(.headline)
+                        .font(.headline.weight(.bold))
                         .lineLimit(1)
                     Image(systemName: "chevron.down")
-                        .font(.caption2)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.primary)
                 }
+                .foregroundColor(RepoIdentityColor.color(for: repo))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    RepoIdentityColor.color(for: repo).opacity(0.18),
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
                 .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
+            .tint(RepoIdentityColor.color(for: repo))
             .help(L10n.Pane.selectRepository)
             .accessibilityLabel(L10n.Pane.selectRepository)
 
@@ -64,15 +89,8 @@ struct RepoPaneHeaderView: View {
                 .foregroundStyle(workStatus == .needsAttention ? .red : .secondary)
                 .help(L10n.Repository.workStatusHelp)
 
-            if !diffStore.hasLoadedInitialStatus || diffStore.isRefreshing {
-                HStack(spacing: 5) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(L10n.Worktree.openingBranch)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityElement(children: .combine)
+            if !diffStore.hasLoadedInitialStatus || (diffStore.isRefreshing && !diffStore.isPulling) {
+                StatusSpinnerLabel(text: L10n.Worktree.openingBranch)
             }
 
             if let status {
@@ -130,27 +148,136 @@ struct RepoPaneHeaderView: View {
         .sheet(isPresented: $showsWorktreePicker) {
             WorktreeBranchPickerView(repo: repo)
         }
+        .confirmationDialog(
+            String(localized: L10n.Repository.pullConfirmationTitle),
+            isPresented: Binding(
+                get: { pullFlow == .confirming },
+                set: { if !$0 { pullFlow = .idle } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(L10n.Repository.pullAction) {
+                Task { await performPull() }
+            }
+            Button(L10n.Common.cancel, role: .cancel) { pullFlow = .idle }
+        } message: {
+            Text(pullConfirmationMessage)
+        }
+        .alert(
+            Text(pullResultTitle),
+            isPresented: Binding(
+                get: { pullFlow == .succeeded || pullFlow == .failed || pullFlow == .skipped },
+                set: { if !$0 { pullFlow = .idle } }
+            )
+        ) {
+            Button(L10n.Common.ok, role: .cancel) { pullFlow = .idle }
+        } message: {
+            Text(pullResultMessage)
+        }
+    }
+
+    private var pullResultTitle: LocalizedStringResource {
+        switch pullFlow {
+        case .succeeded: L10n.Repository.pullSucceededTitle
+        case .skipped: L10n.Repository.pullSkippedTitle
+        default: L10n.Repository.pullFailedTitle
+        }
+    }
+
+    private var pullResultMessage: LocalizedStringResource {
+        switch pullFlow {
+        case .succeeded: L10n.Repository.pullSucceededMessage
+        case .skipped: L10n.Repository.pullSkippedMessage
+        default: L10n.Repository.pullFailedMessage
+        }
+    }
+
+    @ViewBuilder
+    private func pullButton(for status: RepoHeaderStatus) -> some View {
+        if diffStore.isPulling {
+            StatusSpinnerLabel(text: L10n.Repository.pullInProgress)
+        } else if let upstream = status.upstream,
+                  let branch = status.branch,
+                  !status.isDetached {
+            Button {
+                pullFlow = .confirming
+            } label: {
+                Label(L10n.format(L10n.Repository.behind, Int64(status.behind)), systemImage: "arrow.down")
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(.secondary.opacity(0.12), in: Capsule())
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.format(L10n.Repository.pullHelp, upstream, branch))
+            .accessibilityLabel(L10n.format(L10n.Repository.pullHelp, upstream, branch))
+        } else {
+            Label(L10n.format(L10n.Repository.behind, Int64(status.behind)), systemImage: "arrow.down")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var pullConfirmationMessage: String {
+        guard let status = diffStore.headerStatus,
+              let upstream = status.upstream,
+              let branch = status.branch else { return "" }
+        return L10n.format(
+            L10n.Repository.pullConfirmationMessage,
+            Int64(status.behind),
+            upstream,
+            branch
+        )
+    }
+
+    private func performPull() async {
+        guard let result = await diffStore.pullFromUpstream() else {
+            pullFlow = .skipped
+            return
+        }
+        pullFlow = result == .succeeded ? .succeeded : .failed
     }
 
     @ViewBuilder
     private func branchLabel(_ status: RepoHeaderStatus) -> some View {
         HStack(spacing: 4) {
             Image(systemName: "arrow.triangle.branch")
+                .foregroundStyle(.secondary)
             if status.isDetached {
                 Text(L10n.Repository.detachedHead)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.cyan)
             } else {
                 Text(status.branch ?? "—")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.cyan)
             }
             if status.ahead > 0 {
                 Label(L10n.format(L10n.Repository.ahead, Int64(status.ahead)), systemImage: "arrow.up")
+                    .foregroundStyle(.secondary)
             }
-            if status.behind > 0 {
-                Label(L10n.format(L10n.Repository.behind, Int64(status.behind)), systemImage: "arrow.down")
+            if status.behind > 0 || diffStore.isPulling {
+                pullButton(for: status)
             }
         }
         .font(.caption)
-        .foregroundStyle(.secondary)
         .labelStyle(.titleAndIcon)
+    }
+}
+
+/// Spinner kecil + caption, dipakai untuk status "membuka branch" dan "sedang
+/// pull" yang sebelumnya dua blok identik dengan teks berbeda.
+private struct StatusSpinnerLabel: View {
+    let text: LocalizedStringResource
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ProgressView()
+                .controlSize(.small)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -46,8 +46,7 @@ enum RepoOpener {
     static func validatedResult(for url: URL?) -> Result<String, RepoOpenError>? {
         guard let url else { return nil }
         let path = url.path
-        let gitPath = url.appendingPathComponent(".git").path
-        guard FileManager.default.fileExists(atPath: gitPath) else {
+        guard Repo.isGitRepository(atPath: path) else {
             return .failure(.notAGitRepo(path: path))
         }
         return .success(path)

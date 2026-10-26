@@ -6,6 +6,8 @@ enum DiagnosticEvent {
     case terminalStartFailed
     case terminalExited(Int32?)
     case gitStatusFailed(Int32)
+    case gitPullFailed(Int32)
+    case appStatePersistenceFailed(Int)
     case logExportRequested
     case logExported
     case logExportFailed
@@ -20,6 +22,10 @@ enum DiagnosticEvent {
             return "terminal.exited exit_code=\(exitCode.map(String.init) ?? "unknown")"
         case .gitStatusFailed(let exitCode):
             return "git.status_failed exit_code=\(exitCode)"
+        case .gitPullFailed(let exitCode):
+            return "git.pull_failed exit_code=\(exitCode)"
+        case .appStatePersistenceFailed(let errorCode):
+            return "app_state.persistence_failed error_code=\(errorCode)"
         case .logExportRequested:
             return "diagnostics.export_requested"
         case .logExported:

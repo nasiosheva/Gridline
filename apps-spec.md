@@ -80,7 +80,7 @@ Nama repo di header pane membuka pemilih daftar repo tersimpan. Memilih repo yan
 
 Setiap pane punya tiga bagian:
 
-1. **Header pane**: nama repo, nama branch aktif dengan indikator ahead/behind, badge jumlah file berubah, dan tombol **×** untuk menutup repo dari pane itu.
+1. **Header pane**: nama repo, nama branch aktif dengan indikator ahead/behind, badge jumlah file berubah, dan tombol **×** untuk menutup repo dari pane itu. Indikator behind dapat diklik jika branch punya upstream; setelah konfirmasi, Gridline menjalankan `git pull --ff-only`, menampilkan progres, lalu memuat ulang status. Konfirmasi menyatakan bahwa jumlah behind berasal dari status lokal yang mungkin sudah lama. Jika pull tidak bisa fast-forward, Gridline tidak membuat merge atau membuang perubahan lokal dan menampilkan pesan gagal.
 2. **Area atas**: tab diff (selalu ada, tidak bisa ditutup) dan tab viewer file yang dibuka dari terminal. Jika tab tidak muat, tab sisanya masuk menu overflow, dan ⌘P bisa dipakai untuk pindah ke file yang sudah terbuka.
 3. **Area bawah**: bar tab terminal dan terminal aktif.
 
@@ -118,7 +118,7 @@ Ukuran ini diturunkan dari kebutuhan isi apps, bukan dari ukuran layar tertentu:
 | Toolbar | tinggi 52 | Tombol Buka repo, Tambah pane, dan indikator jumlah pane |
 | Header pane | tinggi 32 | Nama repo, branch, badge, dan tombol × |
 | Area terminal | 80 kolom × 12 baris | Lebar standar terminal, sekitar 640 point dengan font 13 pt |
-| Area diff dan viewer | 680 × 200 | Diff split yang masih terbaca |
+| Area diff dan viewer | 680 × 200 | Diff unified yang masih terbaca |
 | Satu pane | 680 × 440 | Header + area atas + area terminal |
 | Jendela utama (1 pane) | 680 × 500 | Toolbar + satu pane |
 | Jendela (2 pane) | 1.380 × 500 | Dua pane berdampingan dengan pembagi |
@@ -162,11 +162,12 @@ Ukuran ini diturunkan dari kebutuhan isi apps, bukan dari ukuran layar tertentu:
 
 **Indikator per pane**
 - Nama branch aktif dan badge jumlah file berubah di header pane.
+- Indikator **behind** dapat dipakai untuk pull upstream secara eksplisit setelah konfirmasi; pull hanya boleh fast-forward. Status Git lainnya tetap baca saja.
 - Indikator kecil jika ada proses yang masih berjalan di salah satu tab terminal repo tersebut.
 
 ## 6. Panel Diff
 
-Diff berada di area atas setiap pane sebagai tab yang tidak bisa ditutup.
+Diff mengisi area atas pane secara langsung. Tab bar ditampilkan saat ada file viewer terbuka agar pengguna bisa berpindah antara Diff dan file; tanpa file viewer, tab bar dan pemisahnya disembunyikan untuk memberi ruang vertikal tambahan.
 
 **Isi**
 - Daftar file berubah, dikelompokkan menjadi: *staged*, *unstaged*, dan *untracked*.
@@ -176,11 +177,14 @@ Diff berada di area atas setiap pane sebagai tab yang tidak bisa ditutup.
 - Klik file menampilkan diff-nya.
 - Baris ditambah berwarna hijau, baris dihapus berwarna merah.
 - Nomor baris ditampilkan di kedua sisi (lama dan baru).
-- Mode yang bisa dipilih: **split** (dua kolom) atau **unified** (satu kolom). Default mengikuti pengaturan.
+- Tampilan isi diff hanya **unified** (satu kolom) — mode split dua kolom tidak ada.
+- Baris yang diedit (pasangan hapus/tambah) menyorot kata/token yang benar-benar berubah dengan warna lebih pekat di atas latar baris, mirip git client lain.
 - Menu ukuran teks pada toolbar diff memperbesar atau memperkecil daftar file dan isi diff 1 pt per langkah (9–20 pt untuk kode), serta menyediakan reset. Ukuran berlaku di seluruh pane, tersimpan antarsesi, dan terpisah dari ukuran teks terminal maupun viewer file.
-- Baris kode diff tetap satu baris pada ukuran teks besar; isi diff bisa digulir horizontal dan vertikal. Lebar kolom split diseragamkan untuk seluruh baris file yang sedang dibuka supaya pasangan baris dan pemisah kolom tetap sejajar.
-- Di pane kecil, mode unified dipakai secara otomatis jika lebar area atas kurang dari batas minimum split.
+- Baris kode diff tetap satu baris pada ukuran teks besar; isi diff bisa digulir horizontal dan vertikal.
 - Filter daftar diff menyembunyikan baris dan preview file yang tidak lolos, termasuk filter perubahan terbaru dan **Sembunyikan File Besar**. Jika pilihan tersembunyi, pilih file pertama yang masih terlihat; jika tidak ada file yang cocok, kosongkan pilihan dan tampilkan pesan filter. Pekerjaan Git yang sudah berjalan tidak dijanjikan dapat dibatalkan.
+- Nama repo ditonjolkan dengan teks tebal berwarna identitas repo dan latar lembut dengan warna yang sama. Nama branch aktif ditampilkan dengan teks cyan terang di header pane. Pada perbandingan terhadap satu branch, kontrol diff menampilkan branch aktif dan branch pembanding sebagai pasangan warna yang berbeda; perbandingan dua branch menampilkan dasar → target dengan warna yang sama. Warna tidak menggantikan label aksesibilitas dan arti panah.
+- Saat membandingkan branch aktif dengan branch pilihan, tombol panah kiri-kanan di antara nama branch membalik arah perbandingan dan beralih ke mode dasar → target. Pada mode dua branch, tombol yang sama menukar dasar dan target. Kedua aksi memuat ulang daftar serta isi diff.
+- Pilihan branch dan arah perbandingan terakhir disimpan per repo dan dipulihkan saat aplikasi dibuka kembali.
 
 **Navigasi**
 - Saat daftar file diff mendapat fokus, ↑/↓ memilih file sebelumnya atau berikutnya; terminal tetap memakai ↑/↓ untuk history saat terminal yang mendapat fokus.
@@ -322,7 +326,6 @@ Dibuka dengan ⌘, (Settings scene di SwiftUI).
 
 - Font, ukuran font, dan tema terminal. Berlaku langsung tanpa restart.
 - Tema terang atau gelap, mengikuti pengaturan macOS atau dipilih manual.
-- Mode diff default (split atau unified).
 - Pintasan keyboard.
 
 ## 12. Persistensi Sesi
@@ -400,6 +403,13 @@ Apps ini harus tetap ringan walaupun 4 repo, banyak tab terminal, dan beberapa a
 - File watcher: FSEvents
 - Syntax highlighting: tree-sitter atau Highlightr
 - Penyimpanan: JSON di Application Support, dengan penulisan atomik
+
+**Organisasi kode**
+- `Gridline/Core/Models` berisi model domain murni seperti repo, layout pane, dan entri diff. Model tidak mengurus view, I/O Git, atau penyimpanan aplikasi.
+- `Gridline/Core/Policies` berisi aturan domain yang dapat dipakai ulang, seperti kebijakan visibilitas file diff.
+- `Gridline/Reusable` berisi helper kecil tanpa state aplikasi yang dipakai lintas layer.
+- `Gridline/Models` berisi state runtime dan orkestrasi per sesi/repo; `Gridline/Support` menangani integrasi sistem, Git, persistence, dan localization; `Gridline/Views` hanya menangani presentasi dan interaksi.
+- Folder-folder tersebut tetap menjadi satu target aplikasi Xcode. Pemisahan menjaga tanggung jawab kode tanpa menambah batas modul/build atau dependency package.
 - Akses folder: path tersimpan, tanpa App Sandbox
 - Notifikasi: UserNotifications
 

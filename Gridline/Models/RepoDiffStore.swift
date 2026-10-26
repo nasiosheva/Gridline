@@ -23,10 +23,13 @@ final class RepoDiffStore: ObservableObject {
     @Published private(set) var staged: [DiffFileEntry] = []
     @Published private(set) var unstaged: [DiffFileEntry] = []
     @Published private(set) var untracked: [DiffFileEntry] = []
+    /// Hanya terisi selama `showIgnoredFiles` menyala (lihat `refresh()`).
+    @Published private(set) var ignored: [DiffFileEntry] = []
     @Published private(set) var headerStatus: RepoHeaderStatus?
     @Published var selectedFileID: DiffFileEntry.ID?
     @Published private(set) var selectedDiff: FileDiff?
     @Published private(set) var isRefreshing = false
+    @Published private(set) var isPulling = false
     @Published private(set) var isGitAvailable = GitProcess.isGitAvailable
     @Published var isFocusMode = false
     @Published private(set) var availableComparisonBranches: [String] = []
@@ -37,6 +40,21 @@ final class RepoDiffStore: ObservableObject {
     @Published private(set) var hasLoadedInitialStatus = false
     @Published var showRecentOnly = false
     @Published var hideLargeFiles = false
+    @Published var hideUntrackedFiles = false
+    /// Menyalakan ini memicu refresh dengan `git status --ignored` (mode
+    /// "traditional") supaya direktori/file yang diabaikan `.gitignore` ikut
+    /// terdaftar; mematikannya langsung mengosongkan `ignored` tanpa menunggu
+    /// refresh berikutnya.
+    @Published var showIgnoredFiles = false {
+        didSet {
+            guard showIgnoredFiles != oldValue else { return }
+            if showIgnoredFiles {
+                Task { await refresh() }
+            } else {
+                ignored = []
+            }
+        }
+    }
 
     private var watcher: RepoFileWatcher?
     private var metadataWatcher: GitMetadataWatcher?
@@ -58,7 +76,7 @@ final class RepoDiffStore: ObservableObject {
     var onComparisonSelectionChanged: ((DiffComparisonSelection) -> Void)?
 
     var allEntries: [DiffFileEntry] {
-        staged + unstaged + untracked
+        staged + unstaged + untracked + ignored
     }
 
     var displayedEntries: [DiffFileEntry] {
@@ -69,6 +87,7 @@ final class RepoDiffStore: ObservableObject {
         displayedEntries.filter { entry in
             (!showRecentOnly || isComparingBranches || DiffVisibilityPolicy.isRecent(entry))
                 && (!hideLargeFiles || !DiffVisibilityPolicy.isLarge(entry))
+                && (!hideUntrackedFiles || entry.group != .untracked)
         }
     }
 
@@ -127,13 +146,33 @@ final class RepoDiffStore: ObservableObject {
         }
     }
 
+    /// Refresh yang sedang berjalan (jika ada). Pemanggil yang datang saat
+    /// refresh lain masih berjalan dulunya cuma menyalakan `refreshRequestedAgain`
+    /// lalu langsung kembali tanpa menunggu — `pullFromUpstream()` jadi bisa
+    /// melaporkan hasil sebelum `headerStatus` benar-benar ter-refresh. Sekarang
+    /// semua pemanggil menunggu task yang sama sampai benar-benar selesai,
+    /// termasuk iterasi tambahan yang dipicu oleh permintaan mereka sendiri.
+    private var activeRefreshTask: Task<Void, Never>?
+
     func refresh() async {
         guard isGitAvailable else { return }
 
-        guard !isRefreshing else {
+        if let activeRefreshTask {
             refreshRequestedAgain = true
+            await activeRefreshTask.value
             return
         }
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.performRefreshLoop()
+        }
+        activeRefreshTask = task
+        await task.value
+    }
+
+    private func performRefreshLoop() async {
+        defer { activeRefreshTask = nil }
 
         isRefreshing = true
         defer { isRefreshing = false }
@@ -142,7 +181,7 @@ final class RepoDiffStore: ObservableObject {
             refreshRequestedAgain = false
             let shouldLoadBranches = shouldRefreshComparisonBranches
             let cachedBranches = availableComparisonBranches
-            async let refreshedStatus = GitDiffService.statusSnapshot(at: repoPath)
+            async let refreshedStatus = GitDiffService.statusSnapshot(at: repoPath, includeIgnored: showIgnoredFiles)
             async let refreshedBranches = shouldLoadBranches
                 ? GitDiffService.comparisonBranches(at: repoPath)
                 : cachedBranches
@@ -150,6 +189,9 @@ final class RepoDiffStore: ObservableObject {
             staged = snapshot.entries.filter { $0.group == .staged }
             unstaged = snapshot.entries.filter { $0.group == .unstaged }
             untracked = snapshot.entries.filter { $0.group == .untracked }
+            if showIgnoredFiles {
+                ignored = snapshot.entries.filter { $0.group == .ignored }
+            }
             headerStatus = snapshot.headerStatus
             hasLoadedInitialStatus = true
 
@@ -227,6 +269,23 @@ final class RepoDiffStore: ObservableObject {
         Task { await refresh() }
     }
 
+    func pullFromUpstream() async -> GitPullResult? {
+        guard !isPulling,
+              let status = headerStatus,
+              status.upstream != nil,
+              status.branch != nil,
+              !status.isDetached,
+              status.behind > 0 else { return nil }
+
+        isPulling = true
+        defer { isPulling = false }
+
+        let result = await GitPullService.pull(at: repoPath)
+        comparisonBranchesLoadedAt = nil
+        await refresh()
+        return result
+    }
+
     func selectComparisonBranch(_ branch: String?) {
         if initialComparisonBranch != nil {
             initialComparisonBranch = nil
@@ -269,6 +328,16 @@ final class RepoDiffStore: ObservableObject {
         selectedDiff = nil
         comparisonEntries = []
         Task { await loadComparisonEntries(from: baseBranch, to: targetBranch) }
+    }
+
+    func swapComparisonBranches() {
+        if let baseBranch = comparisonBaseBranch,
+           let targetBranch = comparisonTargetBranch {
+            selectComparisonBranches(from: targetBranch, to: baseBranch)
+        } else if let comparedBranch = comparisonBranch,
+                  let currentBranch = headerStatus?.branch {
+            selectComparisonBranches(from: currentBranch, to: comparedBranch)
+        }
     }
 
     private func loadComparisonEntries(against branch: String) async {

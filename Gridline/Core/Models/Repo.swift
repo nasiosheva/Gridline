@@ -54,15 +54,4 @@ struct Repo: Identifiable, Codable, Hashable {
     var name: String {
         displayName ?? url.lastPathComponent
     }
-
-    /// Repo dianggap valid jika foldernya ada dan punya `.git` (folder biasa atau file,
-    /// seperti pada worktree) di dalamnya.
-    var existsOnDisk: Bool {
-        var isDirectory: ObjCBool = false
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            return false
-        }
-        return fm.fileExists(atPath: url.appendingPathComponent(".git").path)
-    }
 }

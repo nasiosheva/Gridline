@@ -2,16 +2,16 @@
 //  GitService.swift
 //  Gridline
 //
-//  Pemanggilan Git lewat `Process`, selalu `--no-optional-locks` agar tidak
-//  mengambil lock index yang bisa bentrok dengan commit dari agen atau
-//  perintah lain yang berjalan bersamaan (D8). Baca saja, tidak pernah
-//  menulis ke `.git`.
+//  Pemanggilan Git lewat `Process`. Pemeriksaan status tetap memakai
+//  `--no-optional-locks` agar tidak mengambil lock index (D8); perubahan Git
+//  hanya dilakukan lewat aksi pull eksplisit yang meminta konfirmasi.
 //
 
 import Foundation
 
 struct RepoHeaderStatus: Equatable {
     var branch: String?
+    var upstream: String?
     var ahead: Int = 0
     var behind: Int = 0
     var changedFileCount: Int = 0
@@ -35,6 +35,8 @@ enum GitService {
                 } else {
                     status.branch = String(name)
                 }
+            } else if line.hasPrefix("# branch.upstream ") {
+                status.upstream = String(line.dropFirst("# branch.upstream ".count))
             } else if line.hasPrefix("# branch.ab ") {
                 // Format: "# branch.ab +<ahead> -<behind>"
                 let parts = line.dropFirst("# branch.ab ".count).split(separator: " ")

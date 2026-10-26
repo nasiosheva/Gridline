@@ -16,8 +16,10 @@ struct TopAreaView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            tabBar
-            Divider()
+            if !topAreaStore.openFiles.isEmpty {
+                tabBar
+                Divider()
+            }
             content
         }
         .sheet(isPresented: $showsOpenTabs) {

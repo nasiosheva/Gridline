@@ -592,22 +592,6 @@
         }
       }
     },
-    "diff.mode" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mode"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mode"
-          }
-        }
-      }
-    },
     "diff.no_binary_preview" : {
       "localizations" : {
         "en" : {
@@ -758,22 +742,6 @@
         }
       }
     },
-    "diff.split_mode" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Split"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Terpisah"
-          }
-        }
-      }
-    },
     "diff.staged" : {
       "localizations" : {
         "en" : {
@@ -822,26 +790,26 @@
         }
       }
     },
-    "diff.text_size" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Diff text size" } },
-        "id" : { "stringUnit" : { "state" : "translated", "value" : "Ukuran teks diff" } }
-      }
-    },
-    "diff.unified_mode" : {
+    "diff.swap_branches" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unified"
+            "value" : "Swap base and target branches"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Menyatu"
+            "value" : "Tukar branch dasar dan tujuan"
           }
         }
+      }
+    },
+    "diff.text_size" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Diff text size" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Ukuran teks diff" } }
       }
     },
     "diff.unstaged" : {
@@ -872,6 +840,166 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Belum dilacak"
+          }
+        }
+      }
+    },
+    "diff.ignored" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ignored"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diabaikan"
+          }
+        }
+      }
+    },
+    "diff.all_changes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All Changes"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Semua Perubahan"
+          }
+        }
+      }
+    },
+    "diff.file_list_view" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File List View"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tampilan Daftar File"
+          }
+        }
+      }
+    },
+    "diff.view_as_tree" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View as Tree"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tampilkan sebagai Tree"
+          }
+        }
+      }
+    },
+    "diff.view_as_list" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View as List"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tampilkan sebagai List"
+          }
+        }
+      }
+    },
+    "diff.view_as_combined_list" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View as Combined List"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tampilkan sebagai Daftar Gabungan"
+          }
+        }
+      }
+    },
+    "diff.hide_untracked_files" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide Untracked Files"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sembunyikan File Belum Dilacak"
+          }
+        }
+      }
+    },
+    "diff.hide_untracked_files_help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide untracked files from the list"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sembunyikan file belum dilacak dari daftar"
+          }
+        }
+      }
+    },
+    "diff.show_ignored_files" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Ignored Files"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tampilkan File Diabaikan"
+          }
+        }
+      }
+    },
+    "diff.show_ignored_files_help" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show files ignored by .gitignore"
+          }
+        },
+        "id" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tampilkan file yang diabaikan oleh .gitignore"
           }
         }
       }
@@ -1616,6 +1744,72 @@
             "value" : "%lld commit di belakang"
           }
         }
+      }
+    },
+    "repository.pull_action" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pull" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Tarik Perubahan" } }
+      }
+    },
+    "repository.pull_help" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pull updates from %@ into %@" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Tarik perubahan dari %@ ke %@" } }
+      }
+    },
+    "repository.pull_confirmation_title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pull updates?" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Tarik perubahan?" } }
+      }
+    },
+    "repository.pull_confirmation_message" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Local status shows %lld commits behind %@. Pull will check the remote and only fast-forward %@." } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Status lokal menunjukkan tertinggal %lld commit dari %@. Pull akan memeriksa remote dan hanya memajukan %@ tanpa membuat merge." } }
+      }
+    },
+    "repository.pull_in_progress" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pulling…" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Menarik perubahan…" } }
+      }
+    },
+    "repository.pull_succeeded_title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pull complete" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Pull selesai" } }
+      }
+    },
+    "repository.pull_succeeded_message" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The local branch is up to date." } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Branch lokal sudah diperbarui." } }
+      }
+    },
+    "repository.pull_failed_title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pull failed" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Pull gagal" } }
+      }
+    },
+    "repository.pull_failed_message" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Gridline could not fast-forward this branch. Check network or authentication, or resolve local changes and pull in the terminal." } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Gridline tidak dapat memajukan branch ini. Periksa jaringan atau autentikasi, atau selesaikan perubahan lokal lalu pull lewat terminal." } }
+      }
+    },
+    "repository.pull_skipped_title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pull Skipped" } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Pull Dilewati" } }
+      }
+    },
+    "repository.pull_skipped_message" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The branch state changed before the pull could run (for example, it's already up to date or no longer tracks an upstream). Nothing was pulled." } },
+        "id" : { "stringUnit" : { "state" : "translated", "value" : "Status branch berubah sebelum pull sempat berjalan (misalnya sudah up to date atau tidak lagi melacak upstream). Tidak ada yang di-pull." } }
       }
     },
     "repository.choose_folder_again" : {

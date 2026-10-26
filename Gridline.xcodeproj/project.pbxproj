@@ -7,11 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D105E7C0A1234B7890123456 /* CoreLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D105E7C0A1234B7890123457 /* CoreLogicTests.swift */; };
 		27D5528DECDA6B124797B0E1 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5E138D30FC3E58FDFD571C7 /* XCTest.framework */; };
-		2E5D579D4A81794A80E39791 /* GitMetadataRefreshTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9979D2DC0151C182EEF18F86 /* GitMetadataRefreshTests.swift */; };
 		27DEA61603431F08D5B6C3EF /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = A1CE379D34C8ED22AA3D6BF6 /* SwiftTerm */; };
+		2E5D579D4A81794A80E39791 /* GitMetadataRefreshTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9979D2DC0151C182EEF18F86 /* GitMetadataRefreshTests.swift */; };
 		B17C0A000000000000000001 /* Gridline/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B17C0A000000000000000002 /* Gridline/Assets.xcassets */; };
+		D105E7C0A1234B7890123456 /* CoreLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D105E7C0A1234B7890123457 /* CoreLogicTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,11 +25,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		D105E7C0A1234B7890123457 /* CoreLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreLogicTests.swift; sourceTree = "<group>"; };
 		9979D2DC0151C182EEF18F86 /* GitMetadataRefreshTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitMetadataRefreshTests.swift; sourceTree = "<group>"; };
 		A54C86DA308A60EA003328DB /* Gridline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Gridline.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B17C0A000000000000000002 /* Gridline/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Gridline/Assets.xcassets; sourceTree = SOURCE_ROOT; };
 		B5E138D30FC3E58FDFD571C7 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework; sourceTree = DEVELOPER_DIR; };
+		D105E7C0A1234B7890123457 /* CoreLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreLogicTests.swift; sourceTree = "<group>"; };
 		E75F5CBA7BF5AE48913238DE /* GridlineTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GridlineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -57,11 +57,9 @@
 /* Begin PBXFrameworksBuildPhase section */
 		26F512D7D02767CC192B3032 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				27D5528DECDA6B124797B0E1 /* XCTest.framework in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A54C86D7308A60EA003328DB /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -78,7 +76,6 @@
 				D105E7C0A1234B7890123457 /* CoreLogicTests.swift */,
 				9979D2DC0151C182EEF18F86 /* GitMetadataRefreshTests.swift */,
 			);
-			name = GridlineTests;
 			path = GridlineTests;
 			sourceTree = "<group>";
 		};
@@ -170,12 +167,12 @@
 				LastSwiftUpdateCheck = 2710;
 				LastUpgradeCheck = 2710;
 				TargetAttributes = {
-					A54C86D9308A60EA003328DB = {
-						CreatedOnToolsVersion = 27.1;
-					};
 					69C505C161F1F1E0142260CD = {
 						CreatedOnToolsVersion = 27.1;
 						TestTargetID = A54C86D9308A60EA003328DB;
+					};
+					A54C86D9308A60EA003328DB = {
+						CreatedOnToolsVersion = 27.1;
 					};
 				};
 			};
@@ -204,17 +201,15 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		C7837722415E7532C415A8E4 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		A54C86D8308A60EA003328DB /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 				B17C0A000000000000000001 /* Gridline/Assets.xcassets in Resources */,
+			);
+		};
+		C7837722415E7532C415A8E4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
 			);
 		};
 /* End PBXResourcesBuildPhase section */
@@ -222,12 +217,10 @@
 /* Begin PBXSourcesBuildPhase section */
 		05D45EB8905A352F9F3EF405 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				D105E7C0A1234B7890123456 /* CoreLogicTests.swift in Sources */,
 				2E5D579D4A81794A80E39791 /* GitMetadataRefreshTests.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A54C86D6308A60EA003328DB /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -261,22 +254,6 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Gridline.app/Contents/MacOS/Gridline";
 			};
 			name = Debug;
-		};
-		E181205C6191EA910C2AB8D2 /* Release configuration for PBXNativeTarget "GridlineTests" */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.mories.adb.GridlineTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Gridline.app/Contents/MacOS/Gridline";
-			};
-			name = Release;
 		};
 		A54C86E3308A60EC003328DB /* Debug configuration for PBXProject "Gridline" */ = {
 			isa = XCBuildConfiguration;
@@ -456,6 +433,22 @@
 			};
 			name = Release;
 		};
+		E181205C6191EA910C2AB8D2 /* Release configuration for PBXNativeTarget "GridlineTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mories.adb.GridlineTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Gridline.app/Contents/MacOS/Gridline";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -465,7 +458,6 @@
 				E181205C6191EA910C2AB8D2 /* Release configuration for PBXNativeTarget "GridlineTests" */,
 				5955EE8847B9B95D3E71BC6F /* Debug configuration for PBXNativeTarget "GridlineTests" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		A54C86D5308A60EA003328DB /* Build configuration list for PBXProject "Gridline" */ = {

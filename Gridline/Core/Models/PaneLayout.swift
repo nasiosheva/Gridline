@@ -133,14 +133,16 @@ struct PaneLayout: Codable, Equatable {
     ) {
         let resolvedSlots = slots.isEmpty ? [PaneSlot()] : slots
         self.slots = resolvedSlots
-        self.displayPaneCount = min(max(1, displayPaneCount ?? resolvedSlots.count), resolvedSlots.count)
+        self.displayPaneCount = BoundedValue.clamp(displayPaneCount ?? resolvedSlots.count, to: 1...resolvedSlots.count)
         self.activePaneID = activePaneID.flatMap { candidate in
             resolvedSlots.contains(where: { $0.id == candidate }) ? candidate : nil
         } ?? resolvedSlots[0].id
-        self.topColumnFraction = topColumnFraction.clampedFraction
-        self.bottomColumnFraction = bottomColumnFraction.clampedFraction
-        self.rowFraction = rowFraction.clampedFraction
-        self.gridDividerFractions = gridDividerFractions.mapValues { $0.map(\.clampedFraction) }
+        self.topColumnFraction = BoundedValue.clamp(topColumnFraction, to: 0.1...0.9)
+        self.bottomColumnFraction = BoundedValue.clamp(bottomColumnFraction, to: 0.1...0.9)
+        self.rowFraction = BoundedValue.clamp(rowFraction, to: 0.1...0.9)
+        self.gridDividerFractions = gridDividerFractions.mapValues {
+            $0.map { BoundedValue.clamp($0, to: 0.1...0.9) }
+        }
         self.maximizedPaneID = resolvedSlots.contains(where: { $0.id == maximizedPaneID }) ? maximizedPaneID : nil
         self.terminalOnlyPaneID = resolvedSlots.contains(where: { $0.id == terminalOnlyPaneID })
             ? terminalOnlyPaneID
@@ -406,7 +408,7 @@ struct PaneLayout: Codable, Equatable {
 
     mutating func setTopFraction(_ fraction: Double, for paneID: UUID) {
         guard let index = slots.firstIndex(where: { $0.id == paneID }) else { return }
-        slots[index].topFraction = fraction.clampedFraction
+        slots[index].topFraction = BoundedValue.clamp(fraction, to: 0.1...0.9)
     }
 
     mutating func setViewerAsSidePanel(_ isEnabled: Bool, for paneID: UUID) {
@@ -441,7 +443,7 @@ struct PaneLayout: Codable, Equatable {
     }
 
     mutating func setDividerFractions(_ fractions: [Double], for role: PaneDividerRole) {
-        let clamped = fractions.map(\.clampedFraction)
+        let clamped = fractions.map { BoundedValue.clamp($0, to: 0.1...0.9) }
         guard gridDividerFractions[role.storageKey] != clamped else { return }
         gridDividerFractions[role.storageKey] = clamped
         switch role {
@@ -472,11 +474,5 @@ struct PaneLayout: Codable, Equatable {
             abs(source.row - target.row) * Double(Int(ceil(sqrt(Double(slots.count)))) + 1)
                 + abs(source.column - target.column)
         }
-    }
-}
-
-private extension Double {
-    var clampedFraction: Double {
-        min(max(self, 0.1), 0.9)
     }
 }

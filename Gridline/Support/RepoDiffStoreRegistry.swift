@@ -15,7 +15,7 @@ final class RepoDiffStoreRegistry: ObservableObject {
     private var visibleRepoIDs = Set<UUID>()
 
     /// Dipanggil setelah default perbandingan awal sebuah pane worktree dikonsumsi,
-    /// dengan repo ID yang bersangkutan — pemanggil (lihat `ContentView`) memakai ini
+    /// dengan repo ID yang bersangkutan — pemanggil (lihat `GridlineApp`) memakai ini
     /// untuk membersihkan `Repo.worktreeBaseBranch` di state tersimpan.
     var onWorktreeBaseBranchConsumed: ((UUID) -> Void)?
     var onComparisonSelectionChanged: ((UUID, DiffComparisonSelection) -> Void)?

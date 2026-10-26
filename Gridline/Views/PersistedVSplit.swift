@@ -26,8 +26,8 @@ struct PersistedVSplit<Top: View, Bottom: View>: View {
         GeometryReader { geo in
             let totalHeight = geo.size.height
             let maxTop = max(minTopHeight, totalHeight - minBottomHeight)
-            let committedTopHeight = (totalHeight * topFraction).clamped(to: minTopHeight...maxTop)
-            let topHeight = (liveTopHeight ?? committedTopHeight).clamped(to: minTopHeight...maxTop)
+            let committedTopHeight = BoundedValue.clamp(totalHeight * topFraction, to: minTopHeight...maxTop)
+            let topHeight = BoundedValue.clamp(liveTopHeight ?? committedTopHeight, to: minTopHeight...maxTop)
 
             VStack(spacing: 0) {
                 top()
@@ -58,7 +58,7 @@ struct PersistedVSplit<Top: View, Bottom: View>: View {
                 DragGesture(minimumDistance: 1)
                     .onChanged { value in
                         isDragging = true
-                        let newTop = (currentTop + value.translation.height).clamped(to: minTopHeight...maxTop)
+                        let newTop = BoundedValue.clamp(currentTop + value.translation.height, to: minTopHeight...maxTop)
                         liveTopHeight = newTop
                     }
                     .onEnded { _ in
@@ -70,11 +70,5 @@ struct PersistedVSplit<Top: View, Bottom: View>: View {
                         NSCursor.arrow.set()
                     }
             )
-    }
-}
-
-private extension Comparable {
-    func clamped(to range: ClosedRange<Self>) -> Self {
-        min(max(self, range.lowerBound), range.upperBound)
     }
 }

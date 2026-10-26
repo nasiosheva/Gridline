@@ -104,13 +104,19 @@ enum GitDiffService {
 
     // MARK: - Status (daftar file)
 
-    /// Mengambil daftar file berubah, dikelompokkan staged/unstaged/untracked,
-    /// lengkap dengan jumlah baris ditambah/dihapus.
-    static func statusSnapshot(at path: String) async -> GitDiffStatusSnapshot {
-        let statusOutput = await GitProcess.run(
-            ["--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z"],
-            at: path
-        )
+    /// Mengambil daftar file berubah, dikelompokkan staged/unstaged/untracked
+    /// (dan ignored bila `includeIgnored` dinyalakan dari toggle "Show Ignored
+    /// Files"), lengkap dengan jumlah baris ditambah/dihapus.
+    static func statusSnapshot(at path: String, includeIgnored: Bool = false) async -> GitDiffStatusSnapshot {
+        var arguments = ["--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z"]
+        if includeIgnored {
+            // Mode "traditional" (default `--ignored`), bukan "matching": direktori yang
+            // seluruhnya diabaikan (mis. node_modules/, .build/) dilaporkan sebagai satu
+            // entri, bukan setiap file di dalamnya satu per satu — jauh lebih murah untuk
+            // repo besar sesuai prinsip hemat resource di CLAUDE.md.
+            arguments += ["--ignored"]
+        }
+        let statusOutput = await GitProcess.run(arguments, at: path)
         guard statusOutput.exitCode == 0 else {
             DiagnosticLog.shared.record(.gitStatusFailed(statusOutput.exitCode))
             return GitDiffStatusSnapshot(entries: [], headerStatus: nil)
@@ -143,6 +149,8 @@ enum GitDiffService {
                     entries[index].additions = counts.additions
                     entries[index].deletions = counts.deletions
                 }
+            case .ignored:
+                break
             }
 
             let absolutePath = (path as NSString).appendingPathComponent(entries[index].path)
@@ -187,8 +195,12 @@ enum GitDiffService {
             } else if record.hasPrefix("? ") {
                 let filePath = String(record.dropFirst(2))
                 entries.append(DiffFileEntry(path: filePath, group: .untracked, status: .untracked))
+            } else if record.hasPrefix("! ") {
+                // Hanya muncul saat `--ignored=matching` diminta lewat toggle
+                // "Show Ignored Files" (lihat `statusSnapshot(includeIgnored:)`).
+                let filePath = String(record.dropFirst(2))
+                entries.append(DiffFileEntry(path: filePath, group: .ignored, status: .ignored))
             }
-            // "!" (ignored) sengaja tidak ditangani — git status default tidak menyertakannya.
         }
 
         return entries
@@ -355,13 +367,21 @@ enum GitDiffService {
     // MARK: - Isi diff per file
 
     static func fileDiff(at repoPath: String, for entry: DiffFileEntry) async -> FileDiff {
+        // Direktori yang seluruhnya diabaikan dilaporkan git sebagai satu entri
+        // dengan "/" di akhir (mode "traditional", lihat `statusSnapshot`) —
+        // `git diff --no-index` tidak bisa membandingkan direktori, jadi tidak
+        // perlu memanggil proses Git sama sekali untuk kasus ini.
+        if entry.status == .ignored, entry.path.hasSuffix("/") {
+            return FileDiff(entry: entry, hunks: [], isBinary: false, rawText: "")
+        }
+
         let output: GitProcess.Output
         switch entry.group {
         case .staged:
             output = await GitProcess.run(["--no-optional-locks", "diff", "--cached", "--", entry.path], at: repoPath)
         case .unstaged:
             output = await GitProcess.run(["--no-optional-locks", "diff", "--", entry.path], at: repoPath)
-        case .untracked:
+        case .untracked, .ignored:
             output = await GitProcess.run(["--no-optional-locks", "diff", "--no-index", "--", "/dev/null", entry.path], at: repoPath)
         }
 
@@ -408,6 +428,8 @@ enum GitDiffService {
             return "git restore --staged \(quotedPath)"
         case .unstaged, .untracked:
             return "git add \(quotedPath)"
+        case .ignored:
+            return "git add -f \(quotedPath)"
         }
     }
 

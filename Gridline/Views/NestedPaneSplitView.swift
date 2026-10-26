@@ -255,7 +255,7 @@ final class PaneGridRootViewController: NSViewController {
         let total = splitView.isVertical ? splitView.bounds.width : splitView.bounds.height
         guard total > 0 else { return }
         for (index, fraction) in fractions.enumerated() where index < splitView.subviews.count - 1 {
-            let target = total * min(max(fraction, 0.1), 0.9)
+            let target = total * BoundedValue.clamp(fraction, to: 0.1...0.9)
             let current = splitView.isVertical
                 ? splitView.subviews[index].frame.maxX
                 : splitView.subviews[index].frame.maxY

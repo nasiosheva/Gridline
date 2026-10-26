@@ -3,8 +3,8 @@
 //  Gridline
 //
 //  Panel diff: daftar file (staged/unstaged/untracked) di kiri, isi diff di
-//  kanan. ↑/↓ memilih file, ⌥↑/⌥↓ pindah hunk, mode split/unified bisa
-//  dipilih (bagian 6 apps-spec.md).
+//  kanan (satu kolom, unified). ↑/↓ memilih file, ⌥↑/⌥↓ pindah hunk
+//  (bagian 6 apps-spec.md).
 //
 
 import AppKit
@@ -56,35 +56,34 @@ private final class DiffKeyboardEventMonitor {
     }
 }
 
-enum DiffViewMode: String {
-    case split
-    case unified
+/// Mode tampilan daftar file diff (menu "Tree/List/Combined List" di
+/// toolbar `DiffFileListView`, mirip git client lain seperti Fork).
+enum DiffFileListMode: String {
+    /// Tiap bagian (Staged/Unstaged/Untracked/Ignored) sebagai daftar flat —
+    /// perilaku lama sebelum fitur ini ada, tetap jadi default.
+    case list
+    /// Tiap bagian disusun sebagai hierarki folder yang bisa dilipat.
+    case tree
+    /// Semua entri digabung jadi satu daftar tanpa header bagian.
+    case combinedList
 }
 
 enum DiffFontMetrics {
     private static let tabByte: UInt8 = 0x09
     private static let tabColumns = 8
     private static let textInset: CGFloat = 6
-    private static let splitDividerWidth: CGFloat = 1
 
     static func gutterWidth(for fontSize: Int) -> CGFloat {
         36 * CGFloat(fontSize) / CGFloat(GridlinePreferences.defaultDiffFontSize)
     }
 
-    static func layout(maximumColumns: Int, mode: DiffViewMode, fontSize: Int, viewportWidth: CGFloat) -> DiffTextLayout {
+    static func layout(maximumColumns: Int, fontSize: Int, viewportWidth: CGFloat) -> DiffTextLayout {
         let font = NSFont.monospacedSystemFont(ofSize: CGFloat(fontSize), weight: .regular)
         let characterWidth = ("W" as NSString).size(withAttributes: [.font: font]).width
         let textWidth = ceil(CGFloat(maximumColumns) * characterWidth)
         let gutter = gutterWidth(for: fontSize)
-        let columnWidth = max((viewportWidth - splitDividerWidth) / 2, gutter + textInset + textWidth)
-        let contentWidth: CGFloat
-        switch mode {
-        case .split:
-            contentWidth = max(viewportWidth, 2 * columnWidth + splitDividerWidth)
-        case .unified:
-            contentWidth = max(viewportWidth, 2 * gutter + textInset + textWidth)
-        }
-        return DiffTextLayout(fontSize: fontSize, contentWidth: contentWidth, columnWidth: columnWidth)
+        let contentWidth = max(viewportWidth, 2 * gutter + textInset + textWidth)
+        return DiffTextLayout(fontSize: fontSize, contentWidth: contentWidth)
     }
 
     static func maximumColumns(in diff: FileDiff) -> Int {
@@ -117,10 +116,57 @@ final class DiffColumnCountCache {
     }
 }
 
+/// Cache highlight word-level per baris (lihat `WordDiffPolicy`), diinvalidasi
+/// memakai `rawText` yang sama seperti `DiffColumnCountCache` supaya tidak
+/// dihitung ulang di setiap render selama isi diff tidak berubah.
+final class WordDiffHighlightCache {
+    private var rawText: String?
+    private var highlightsByLineID: [DiffLine.ID: [Range<Int>]] = [:]
+
+    func highlights(for diff: FileDiff) -> [DiffLine.ID: [Range<Int>]] {
+        guard rawText != diff.rawText else { return highlightsByLineID }
+        rawText = diff.rawText
+        highlightsByLineID = Self.compute(for: diff)
+        return highlightsByLineID
+    }
+
+    private static func compute(for diff: FileDiff) -> [DiffLine.ID: [Range<Int>]] {
+        var result: [DiffLine.ID: [Range<Int>]] = [:]
+        for hunk in diff.hunks {
+            for pair in DiffLinePairingPolicy.pairs(in: hunk.lines) {
+                guard let oldLine = pair.0, let newLine = pair.1,
+                      oldLine.kind == .deletion, newLine.kind == .addition else { continue }
+                let changed = WordDiffPolicy.changedRanges(old: oldLine.text, new: newLine.text)
+                result[oldLine.id] = changed.old
+                result[newLine.id] = changed.new
+            }
+        }
+        return result
+    }
+}
+
+/// Merender teks baris diff dengan highlight word-level sebagai background
+/// pada rentang yang berubah. Memakai satu `Text(AttributedString)` (bukan
+/// beberapa `Text` yang disusun) supaya tetap ringan dirender dan perilaku
+/// `.lineLimit`/`.fixedSize` sama seperti sebelum highlight ditambahkan.
+private func highlightedLineText(_ text: String, ranges: [Range<Int>], highlightColor: Color) -> Text {
+    let content = text.isEmpty ? " " : text
+    guard !ranges.isEmpty else { return Text(content) }
+
+    var attributed = AttributedString(content)
+    for range in ranges {
+        guard range.lowerBound >= 0, range.upperBound <= content.count,
+              let lower = attributed.characters.index(attributed.startIndex, offsetBy: range.lowerBound, limitedBy: attributed.endIndex),
+              let upper = attributed.characters.index(attributed.startIndex, offsetBy: range.upperBound, limitedBy: attributed.endIndex)
+        else { continue }
+        attributed[lower..<upper].backgroundColor = highlightColor
+    }
+    return Text(attributed)
+}
+
 struct DiffTextLayout {
     let fontSize: Int
     let contentWidth: CGFloat
-    let columnWidth: CGFloat
 }
 
 struct DiffAreaView: View {
@@ -129,16 +175,11 @@ struct DiffAreaView: View {
     /// di viewer. Entry point sementara sebelum Cmd+klik (M2 langkah 7) ada.
     var onOpenFile: (String) -> Void = { _ in }
     var showsFileList = true
-    @AppStorage("gridline.diffViewMode") private var modeRawValue: String = DiffViewMode.split.rawValue
     @AppStorage(GridlinePreferences.diffFontSizeKey)
     private var fontSize = GridlinePreferences.defaultDiffFontSize
     @State private var selectedHunkID: DiffHunk.ID?
     @FocusState private var diffHasKeyboardFocus: Bool
     @State private var keyboardMonitor = DiffKeyboardEventMonitor()
-
-    private var mode: DiffViewMode {
-        DiffViewMode(rawValue: modeRawValue) ?? .split
-    }
 
     var body: some View {
         Group {
@@ -147,10 +188,8 @@ struct DiffAreaView: View {
             } else if store.isFocusMode || !showsFileList {
                 DiffContentView(
                     store: store,
-                    mode: mode,
                     selectedHunkID: $selectedHunkID,
                     fontSize: fontSize,
-                    onToggleMode: { modeRawValue = $0.rawValue },
                     onToggleFocus: { store.isFocusMode = false },
                     showsFocusToggle: showsFileList
                 )
@@ -172,10 +211,8 @@ struct DiffAreaView: View {
                         .frame(minWidth: 220, idealWidth: 260, maxWidth: 360)
                     DiffContentView(
                         store: store,
-                        mode: mode,
                         selectedHunkID: $selectedHunkID,
                         fontSize: fontSize,
-                        onToggleMode: { modeRawValue = $0.rawValue },
                         onToggleFocus: { store.isFocusMode = true },
                         showsFocusToggle: showsFileList
                     )
@@ -270,31 +307,66 @@ private struct DiffFileListView: View {
     let onRequestKeyboardFocus: () -> Void
     @State private var showsBranchComparison = false
     @State private var showsBranchPicker = false
+    @AppStorage("gridline.diffFileListMode") private var fileListModeRawValue: String = DiffFileListMode.list.rawValue
+    /// Folder yang sengaja dilipat pengguna di mode "Tree" (kosong = semua
+    /// expand, default-nya). Dikelola terpusat di sini, bukan `@State` per
+    /// baris, karena baris Tree sekarang di-flatten jadi satu `ForEach` (lihat
+    /// `flattenedTreeRows`) supaya indentasinya tidak ikut ditambah otomatis
+    /// oleh indentasi hierarki bawaan `.listStyle(.sidebar)`.
+    @State private var collapsedFolderIDs: Set<String> = []
+
+    private var fileListMode: DiffFileListMode {
+        DiffFileListMode(rawValue: fileListModeRawValue) ?? .list
+    }
+
+    private func orderedForNavigation(_ entries: [DiffFileEntry]) -> [DiffFileEntry] {
+        fileListMode == .tree ? DiffFileTreePolicy.orderedEntries(from: entries) : entries
+    }
+
+    /// Fungsi biasa (bukan langsung `if/else` di `body`) karena `body` dibaca
+    /// sebagai `@ViewBuilder` — `if/else` telanjang di sana ditransformasi
+    /// jadi konstruksi View, bukan sekadar cabang nilai biasa.
+    private func navigationOrder(
+        visibleEntries: [DiffFileEntry],
+        visibleStaged: [DiffFileEntry],
+        visibleUnstaged: [DiffFileEntry],
+        visibleUntracked: [DiffFileEntry],
+        visibleIgnored: [DiffFileEntry]
+    ) -> [DiffFileEntry] {
+        if store.comparisonBaseBranch != nil && store.comparisonTargetBranch != nil {
+            return orderedForNavigation(visibleEntries)
+        } else if store.comparisonBranch != nil {
+            return orderedForNavigation(visibleEntries)
+        } else if fileListMode == .combinedList {
+            return visibleEntries
+        } else {
+            return orderedForNavigation(visibleStaged)
+                + orderedForNavigation(visibleUnstaged)
+                + orderedForNavigation(visibleUntracked)
+                + orderedForNavigation(visibleIgnored)
+        }
+    }
 
     var body: some View {
         let visibleEntries = store.visibleEntries
         let visibleStaged = visibleEntries.filter { $0.group == .staged }
         let visibleUnstaged = visibleEntries.filter { $0.group == .unstaged }
         let visibleUntracked = visibleEntries.filter { $0.group == .untracked }
+        let visibleIgnored = visibleEntries.filter { $0.group == .ignored }
+        // Mode "Tree" merender file dalam urutan traversal folder, bukan
+        // urutan flat `visibleEntries` — navigasi keyboard ↑/↓ harus mengikuti
+        // urutan yang benar-benar tampil, bukan urutan data mentahnya.
+        let navOrder = navigationOrder(
+            visibleEntries: visibleEntries,
+            visibleStaged: visibleStaged,
+            visibleUnstaged: visibleUnstaged,
+            visibleUntracked: visibleUntracked,
+            visibleIgnored: visibleIgnored
+        )
 
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Button {
-                    showsBranchPicker = true
-                } label: {
-                    Label(comparisonLabel, systemImage: "arrow.triangle.branch")
-                        .lineLimit(1)
-                }
-                .buttonStyle(.borderless)
-                .help(L10n.Diff.compareBranchHelp)
-                .popover(isPresented: $showsBranchPicker, arrowEdge: .bottom) {
-                    DiffBranchPickerPopover(store: store) {
-                        showsBranchPicker = false
-                        DispatchQueue.main.async {
-                            showsBranchComparison = true
-                        }
-                    }
-                }
+                comparisonControls
 
                 if !store.isComparingBranches {
                     Toggle(isOn: $store.showRecentOnly) {
@@ -305,6 +377,7 @@ private struct DiffFileListView: View {
                     .help(L10n.Diff.recentFilterHelp)
                     .accessibilityLabel(L10n.Diff.tenMinutes)
                 }
+
                 Toggle(isOn: $store.hideLargeFiles) {
                     Label(L10n.Diff.hideLargeFiles, systemImage: "doc.badge.ellipsis")
                 }
@@ -312,6 +385,8 @@ private struct DiffFileListView: View {
                 .labelStyle(.iconOnly)
                 .help(L10n.Diff.hideLargeFilesHelp)
                 .accessibilityLabel(L10n.Diff.hideLargeFiles)
+
+                fileListViewMenu
                 Spacer(minLength: 0)
             }
             .font(.caption)
@@ -330,16 +405,19 @@ private struct DiffFileListView: View {
                 }
             )) {
                 if let baseBranch = store.comparisonBaseBranch, let targetBranch = store.comparisonTargetBranch {
-                    section(title: L10n.format(L10n.Diff.comparedBranches, targetBranch, baseBranch), entries: visibleEntries)
+                    fileListSection(title: L10n.format(L10n.Diff.comparedBranches, targetBranch, baseBranch), entries: visibleEntries)
                 } else if let comparisonBranch = store.comparisonBranch {
-                    section(title: L10n.format(L10n.Diff.comparedWithBranch, comparisonBranch), entries: visibleEntries)
+                    fileListSection(title: L10n.format(L10n.Diff.comparedWithBranch, comparisonBranch), entries: visibleEntries)
+                } else if fileListMode == .combinedList {
+                    fileListSection(title: String(localized: L10n.Diff.allChanges), entries: visibleEntries)
                 } else {
-                    section(title: String(localized: DiffChangeGroup.staged.label), entries: visibleStaged)
-                    section(title: String(localized: DiffChangeGroup.unstaged.label), entries: visibleUnstaged)
-                    section(title: String(localized: DiffChangeGroup.untracked.label), entries: visibleUntracked)
+                    fileListSection(title: String(localized: DiffChangeGroup.staged.label), entries: visibleStaged)
+                    fileListSection(title: String(localized: DiffChangeGroup.unstaged.label), entries: visibleUnstaged)
+                    fileListSection(title: String(localized: DiffChangeGroup.untracked.label), entries: visibleUntracked)
+                    fileListSection(title: String(localized: DiffChangeGroup.ignored.label), entries: visibleIgnored)
                 }
             }
-            .onChange(of: visibleEntries.map(\.id), initial: true) { _, ids in
+            .onChange(of: navOrder.map(\.id), initial: true) { _, ids in
                 onVisibleEntriesChange(ids)
             }
             .listStyle(.sidebar)
@@ -357,6 +435,7 @@ private struct DiffFileListView: View {
                     .strokeBorder(Color.accentColor.opacity(isKeyboardFocused ? 0.7 : 0), lineWidth: 1)
                     .allowsHitTesting(false)
             }
+
             if isKeyboardFocused, !visibleEntries.isEmpty {
                 Text(L10n.Diff.keyboardNavigationHint)
                     .font(.caption2)
@@ -373,16 +452,103 @@ private struct DiffFileListView: View {
         }
     }
 
+    @ViewBuilder
+    private var comparisonControls: some View {
+        Group {
+            if let comparedBranch = store.comparisonBranch {
+                HStack(spacing: 5) {
+                    branchPickerButton(currentBranchName, color: .cyan, showsBranchIcon: true)
+                    swapBranchesButton
+                    branchPickerButton(comparedBranch, color: .orange)
+                }
+            } else if let baseBranch = store.comparisonBaseBranch,
+                      let targetBranch = store.comparisonTargetBranch {
+                // Dua branch dibandingkan langsung (dasar → target), bukan
+                // "branch aktif" vs "branch pembanding" — apps-spec.md
+                // mendokumentasikan keduanya memakai warna yang sama di sini,
+                // beda dari pasangan warna asimetris di mode satu branch di atas.
+                HStack(spacing: 5) {
+                    branchPickerButton(baseBranch, color: .cyan, showsBranchIcon: true)
+                    swapBranchesButton
+                    branchPickerButton(targetBranch, color: .cyan)
+                }
+            } else {
+                Button {
+                    showsBranchPicker = true
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .foregroundStyle(.secondary)
+                        Text(L10n.Diff.localChanges)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.Diff.compareBranchHelp)
+                .accessibilityLabel(comparisonLabel)
+            }
+        }
+        .popover(isPresented: $showsBranchPicker, arrowEdge: .bottom) {
+            DiffBranchPickerPopover(store: store) {
+                showsBranchPicker = false
+                DispatchQueue.main.async {
+                    showsBranchComparison = true
+                }
+            }
+        }
+    }
+
+    private var swapBranchesButton: some View {
+        Button {
+            store.swapComparisonBranches()
+        } label: {
+            Image(systemName: "arrow.left.arrow.right")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.borderless)
+        .help(L10n.Diff.swapBranches)
+        .accessibilityLabel(L10n.Diff.swapBranches)
+        .disabled(!store.isComparingBranches && store.headerStatus?.branch == nil)
+    }
+
+    private func branchPickerButton(_ branch: String, color: Color, showsBranchIcon: Bool = false) -> some View {
+        Button {
+            showsBranchPicker = true
+        } label: {
+            HStack(spacing: 5) {
+                if showsBranchIcon {
+                    Image(systemName: "arrow.triangle.branch")
+                        .foregroundStyle(.secondary)
+                }
+                Text(branch)
+                    .foregroundStyle(color)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .buttonStyle(.borderless)
+        .help(L10n.Diff.compareBranchHelp)
+        .accessibilityLabel(comparisonLabel)
+    }
+
     private var comparisonLabel: String {
         if let baseBranch = store.comparisonBaseBranch, let targetBranch = store.comparisonTargetBranch {
             return L10n.format(L10n.Diff.branchComparisonLabel, baseBranch, targetBranch)
         }
         if let comparisonBranch = store.comparisonBranch {
-            // Bukan "branch aktif" pane — ini branch yang sedang dibandingkan, supaya
-            // tidak terlihat seperti harus sinkron dengan branch di header pane.
             return L10n.format(L10n.Diff.comparedWithBranch, comparisonBranch)
         }
         return String(localized: L10n.Diff.localChanges)
+    }
+
+    private var currentBranchName: String {
+        if let branch = store.headerStatus?.branch { return branch }
+        if store.headerStatus?.isDetached == true {
+            return String(localized: L10n.Repository.detachedHead)
+        }
+        return "—"
     }
 
     private var emptyListMessage: String {
@@ -394,27 +560,191 @@ private struct DiffFileListView: View {
         return String(localized: L10n.Diff.noFilesMatchFilter)
     }
 
+    private var fileListViewMenu: some View {
+        Menu {
+            Picker(selection: Binding(
+                get: { fileListMode },
+                set: { fileListModeRawValue = $0.rawValue }
+            )) {
+                Text(L10n.Diff.viewAsTree).tag(DiffFileListMode.tree)
+                Text(L10n.Diff.viewAsList).tag(DiffFileListMode.list)
+                Text(L10n.Diff.viewAsCombinedList).tag(DiffFileListMode.combinedList)
+            } label: {
+                EmptyView()
+            }
+            .pickerStyle(.inline)
+
+            Divider()
+
+            Toggle(isOn: $store.hideUntrackedFiles) {
+                Text(L10n.Diff.hideUntrackedFiles)
+            }
+            .help(L10n.Diff.hideUntrackedFilesHelp)
+
+            Toggle(isOn: $store.showIgnoredFiles) {
+                Text(L10n.Diff.showIgnoredFiles)
+            }
+            .help(L10n.Diff.showIgnoredFilesHelp)
+        } label: {
+            Image(systemName: "list.bullet.indent")
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: 24, height: 24)
+        .help(L10n.Diff.fileListView)
+        .accessibilityLabel(L10n.Diff.fileListView)
+    }
+
     @ViewBuilder
-    private func section(title: String, entries: [DiffFileEntry]) -> some View {
+    private func fileListSection(title: String, entries: [DiffFileEntry]) -> some View {
         if !entries.isEmpty {
             Section(title) {
-                ForEach(entries) { entry in
-                    DiffFileRow(
-                        entry: entry,
-                        repoPath: store.repoPath,
-                        fontSize: fontSize,
-                        isSelected: store.selectedFileID == entry.id
+                if fileListMode == .tree {
+                    let rows = flattenedTreeRows(
+                        DiffFileTreePolicy.tree(from: entries),
+                        depth: 0,
+                        collapsedFolderIDs: collapsedFolderIDs
                     )
+                    ForEach(rows) { row in
+                        DiffFileTreeRow(
+                            row: row,
+                            repoPath: store.repoPath,
+                            fontSize: fontSize,
+                            selectedFileID: store.selectedFileID,
+                            onOpenFile: onOpenFile,
+                            isCollapsed: collapsedFolderIDs.contains(row.id),
+                            onToggleCollapse: { toggleFolderCollapse(row.id) }
+                        )
+                    }
+                } else {
+                    ForEach(entries) { entry in
+                        DiffFileRow(
+                            entry: entry,
+                            repoPath: store.repoPath,
+                            fontSize: fontSize,
+                            isSelected: store.selectedFileID == entry.id
+                        )
                         .tag(entry.id)
                         .onTapGesture(count: 2) {
                             let absolutePath = (store.repoPath as NSString).appendingPathComponent(entry.path)
                             onOpenFile(absolutePath)
                         }
+                    }
                 }
             }
         }
     }
 
+    private func toggleFolderCollapse(_ id: String) {
+        if collapsedFolderIDs.contains(id) {
+            collapsedFolderIDs.remove(id)
+        } else {
+            collapsedFolderIDs.insert(id)
+        }
+    }
+
+    /// Meratakan pohon jadi satu daftar baris urut tampilan (folder lalu
+    /// anaknya, kecuali folder itu sedang dilipat), supaya baris Tree bisa
+    /// dirender lewat satu `ForEach` biasa tanpa `DisclosureGroup` bersarang
+    /// — itu caranya indentasi antar level cuma dari `leadingIndent` kita
+    /// sendiri, bukan ditambah lagi oleh indentasi hierarki bawaan List.
+    private func flattenedTreeRows(
+        _ nodes: [DiffFileTreePolicy.Node],
+        depth: Int,
+        collapsedFolderIDs: Set<String>
+    ) -> [DiffTreeDisplayRow] {
+        nodes.flatMap { node -> [DiffTreeDisplayRow] in
+            switch node.content {
+            case .file(let entry):
+                return [DiffTreeDisplayRow(id: node.id, depth: depth, kind: .file(entry))]
+            case .folder:
+                let header = DiffTreeDisplayRow(id: node.id, depth: depth, kind: .folder(name: node.name))
+                guard !collapsedFolderIDs.contains(node.id) else { return [header] }
+                return [header] + flattenedTreeRows(node.children, depth: depth + 1, collapsedFolderIDs: collapsedFolderIDs)
+            }
+        }
+    }
+}
+
+/// Satu baris hasil `flattenedTreeRows`, dipakai sebagai item `ForEach` di
+/// mode "Tree" — baik baris file maupun header folder.
+private struct DiffTreeDisplayRow: Identifiable {
+    enum Kind {
+        case file(DiffFileEntry)
+        case folder(name: String)
+    }
+
+    let id: String
+    let depth: Int
+    let kind: Kind
+}
+
+/// Satu baris di mode "Tree": folder sebagai header dengan chevron yang bisa
+/// di-tap untuk dilipat/dibuka, file sebagai `DiffFileRow` biasa (tetap bisa
+/// diseleksi/dibuka lewat double-click seperti mode List). Indentasi dihitung
+/// manual lewat `leadingIndent(for:)`, bukan lewat nesting `DisclosureGroup`,
+/// supaya tidak kena indentasi hierarki tambahan dari `.listStyle(.sidebar)`.
+private struct DiffFileTreeRow: View {
+    let row: DiffTreeDisplayRow
+    let repoPath: String
+    let fontSize: Int
+    let selectedFileID: DiffFileEntry.ID?
+    let onOpenFile: (String) -> Void
+    let isCollapsed: Bool
+    let onToggleCollapse: () -> Void
+
+    var body: some View {
+        switch row.kind {
+        case .file(let entry):
+            DiffFileRow(
+                entry: entry,
+                repoPath: repoPath,
+                fontSize: fontSize,
+                isSelected: selectedFileID == entry.id
+            )
+            .tag(entry.id)
+            .padding(.leading, Self.leadingIndent(for: row.depth))
+            .listRowInsets(Self.rowInsets)
+            .onTapGesture(count: 2) {
+                let absolutePath = (repoPath as NSString).appendingPathComponent(entry.path)
+                onOpenFile(absolutePath)
+            }
+        case .folder(let name):
+            Button(action: onToggleCollapse) {
+                HStack(spacing: 4) {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: CGFloat(fontSize) - 3))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 10, alignment: .center)
+                    Image(systemName: "folder")
+                        .foregroundStyle(.secondary)
+                    Text(name).lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .font(.system(size: CGFloat(fontSize + 2)))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, Self.leadingIndent(for: row.depth))
+            .listRowInsets(Self.rowInsets)
+        }
+    }
+
+    /// Insets baris yang lebih rapat dari bawaan `.listStyle(.sidebar)`,
+    /// supaya jarak vertikal antar baris Tree (termasuk antar level
+    /// folder/file) tidak terlalu renggang.
+    private static let rowInsets = EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8)
+
+    /// Dibatasi di kedalaman tertentu supaya folder yang sangat bersarang
+    /// (meski sudah dipadatkan oleh `DiffFileTreePolicy`) tidak sampai
+    /// menghabiskan seluruh lebar sidebar dan membuat nama file/badge
+    /// `+N`/`-N` hilang — lihat `DiffFileRow`. Nilainya sengaja kecil karena
+    /// ini satu-satunya sumber indentasi (tidak ada lagi indentasi hierarki
+    /// bawaan List, lihat `flattenedTreeRows`).
+    private static func leadingIndent(for depth: Int) -> CGFloat {
+        CGFloat(min(depth, 6)) * 6
+    }
 }
 
 private struct DiffBranchPickerPopover: View {
@@ -532,6 +862,7 @@ private struct DiffFileRow: View {
             Text(entry.displayName)
                 .font(.system(size: CGFloat(fontSize + 2)))
                 .lineLimit(1)
+                .layoutPriority(1)
                 .help(entry.path)
 
             Spacer()
@@ -548,7 +879,7 @@ private struct DiffFileRow: View {
             }
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 3)
+        .padding(.vertical, 2)
         .background {
             if isSelected {
                 RoundedRectangle(cornerRadius: 6)
@@ -581,6 +912,7 @@ private struct DiffFileRow: View {
         case .untracked: return .secondary
         case .unmerged: return .orange
         case .typeChanged: return .purple
+        case .ignored: return .secondary
         }
     }
 }
@@ -589,11 +921,10 @@ private struct DiffFileRow: View {
 
 private struct DiffContentView: View {
     @ObservedObject var store: RepoDiffStore
-    let mode: DiffViewMode
     @Binding var selectedHunkID: DiffHunk.ID?
     let fontSize: Int
     @State private var columnCountCache = DiffColumnCountCache()
-    var onToggleMode: (DiffViewMode) -> Void
+    @State private var wordDiffCache = WordDiffHighlightCache()
     var onToggleFocus: () -> Void
     var showsFocusToggle: Bool
 
@@ -700,14 +1031,6 @@ private struct DiffContentView: View {
             .menuStyle(.borderlessButton)
             .help(L10n.Diff.textSize)
             .accessibilityLabel(L10n.Diff.textSize)
-
-            Picker(L10n.Diff.mode, selection: Binding(get: { mode }, set: { onToggleMode($0 == mode ? mode : $0) })) {
-                Text(L10n.Diff.splitMode).tag(DiffViewMode.split)
-                Text(L10n.Diff.unifiedMode).tag(DiffViewMode.unified)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 160)
-            .labelsHidden()
         }
         .padding(6)
     }
@@ -716,15 +1039,15 @@ private struct DiffContentView: View {
         GeometryReader { geometry in
             let layout = DiffFontMetrics.layout(
                 maximumColumns: columnCountCache.count(for: diff),
-                mode: mode,
                 fontSize: fontSize,
                 viewportWidth: geometry.size.width
             )
+            let wordDiffHighlights = wordDiffCache.highlights(for: diff)
             ScrollViewReader { proxy in
                 ScrollView([.horizontal, .vertical]) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(diff.hunks) { hunk in
-                            DiffHunkView(hunk: hunk, mode: mode, layout: layout)
+                            DiffHunkView(hunk: hunk, layout: layout, wordDiffHighlights: wordDiffHighlights)
                                 .id(hunk.id)
                                 .background(hunk.id == selectedHunkID ? Color.accentColor.opacity(0.08) : Color.clear)
                         }
@@ -747,8 +1070,8 @@ private struct DiffContentView: View {
 
 private struct DiffHunkView: View {
     let hunk: DiffHunk
-    let mode: DiffViewMode
     let layout: DiffTextLayout
+    let wordDiffHighlights: [DiffLine.ID: [Range<Int>]]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -762,23 +1085,19 @@ private struct DiffHunkView: View {
                 .frame(width: layout.contentWidth, alignment: .leading)
                 .background(Color.secondary.opacity(0.1))
 
-            switch mode {
-            case .unified:
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(hunk.lines) { line in
-                        UnifiedDiffLineView(line: line, layout: layout)
-                    }
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(hunk.lines) { line in
+                    DiffLineView(line: line, layout: layout, highlightRanges: wordDiffHighlights[line.id] ?? [])
                 }
-            case .split:
-                SplitDiffLinesView(lines: hunk.lines, layout: layout)
             }
         }
     }
 }
 
-private struct UnifiedDiffLineView: View {
+private struct DiffLineView: View {
     let line: DiffLine
     let layout: DiffTextLayout
+    let highlightRanges: [Range<Int>]
 
     var body: some View {
         HStack(spacing: 0) {
@@ -788,7 +1107,7 @@ private struct UnifiedDiffLineView: View {
             Text(line.newLineNumber.map(String.init) ?? "")
                 .frame(width: DiffFontMetrics.gutterWidth(for: layout.fontSize), alignment: .trailing)
                 .foregroundStyle(.secondary)
-            Text(line.text.isEmpty ? " " : line.text)
+            highlightedLineText(line.text, ranges: highlightRanges, highlightColor: wordHighlightColor)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .padding(.leading, 6)
@@ -806,94 +1125,13 @@ private struct UnifiedDiffLineView: View {
         case .context: return Color.clear
         }
     }
-}
 
-/// Mode split: baris lama dan baru digabung per pasangan sederhana —
-/// konteks tampil di kedua kolom, tambah/hapus berurutan ditampilkan sejajar
-/// bila jumlahnya sama, selain itu ditumpuk berurutan di kolom masing-masing.
-private struct SplitDiffLinesView: View {
-    let lines: [DiffLine]
-    let layout: DiffTextLayout
-
-    var body: some View {
-        let rows = Self.pairRows(from: lines)
-        LazyVStack(spacing: 0) {
-            ForEach(rows.indices, id: \.self) { index in
-                SplitDiffRow(left: rows[index].0, right: rows[index].1, layout: layout)
-            }
-        }
-    }
-
-    private static func pairRows(from lines: [DiffLine]) -> [(DiffLine?, DiffLine?)] {
-        var rows: [(DiffLine?, DiffLine?)] = []
-        var index = 0
-        while index < lines.count {
-            let line = lines[index]
-            switch line.kind {
-            case .context:
-                rows.append((line, line))
-                index += 1
-            case .deletion:
-                var deletions: [DiffLine] = []
-                while index < lines.count, lines[index].kind == .deletion {
-                    deletions.append(lines[index])
-                    index += 1
-                }
-                var additions: [DiffLine] = []
-                while index < lines.count, lines[index].kind == .addition {
-                    additions.append(lines[index])
-                    index += 1
-                }
-                let maxCount = max(deletions.count, additions.count)
-                for i in 0..<maxCount {
-                    rows.append((i < deletions.count ? deletions[i] : nil, i < additions.count ? additions[i] : nil))
-                }
-            case .addition:
-                rows.append((nil, line))
-                index += 1
-            }
-        }
-        return rows
-    }
-}
-
-private struct SplitDiffRow: View {
-    let left: DiffLine?
-    let right: DiffLine?
-    let layout: DiffTextLayout
-
-    var body: some View {
-        HStack(spacing: 0) {
-            lineColumn(left)
-            Divider()
-            lineColumn(right)
-        }
-        .font(.system(size: CGFloat(layout.fontSize), design: .monospaced))
-        .frame(width: layout.contentWidth, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func lineColumn(_ line: DiffLine?) -> some View {
-        HStack(spacing: 0) {
-            Text(line?.oldLineNumber.map(String.init) ?? (line?.newLineNumber.map(String.init) ?? ""))
-                .frame(width: DiffFontMetrics.gutterWidth(for: layout.fontSize), alignment: .trailing)
-                .foregroundStyle(.secondary)
-            Text(line?.text ?? "")
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.leading, 6)
-        }
-        .padding(.vertical, 1)
-        .frame(width: layout.columnWidth, alignment: .leading)
-        .background(backgroundColor(for: line))
-    }
-
-    private func backgroundColor(for line: DiffLine?) -> Color {
-        guard let line else { return .clear }
+    private var wordHighlightColor: Color {
         switch line.kind {
-        case .addition: return Color.green.opacity(0.15)
-        case .deletion: return Color.red.opacity(0.15)
-        case .context: return .clear
+        case .addition: return Color.green.opacity(0.35)
+        case .deletion: return Color.red.opacity(0.35)
+        case .context: return Color.clear
         }
     }
 }
+

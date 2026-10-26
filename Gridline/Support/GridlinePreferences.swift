@@ -57,6 +57,6 @@ enum GridlinePreferences {
     }
 
     private static func adjustedFontSize(_ current: Int, by amount: Int, minimum: Int, maximum: Int) -> Int {
-        min(max(current + amount, minimum), maximum)
+        BoundedValue.clamp(current + amount, to: minimum...maximum)
     }
 }
