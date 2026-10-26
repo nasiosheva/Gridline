@@ -137,6 +137,7 @@ Sedang berjalan:
 - [ ] **20. Fitur tambahan dari 17a yang belum masuk.** *(implementasi siap; verifikasi build/runtime pending)*
   - Status kerja repo kini menunjukkan idle, jumlah terminal berjalan, atau perlu perhatian. Proses selesai mengirim notifikasi lokal dengan nama repo/tab setelah izin notifikasi diberikan.
   - Panel diff menyediakan filter perubahan 10 menit terakhir dan opsi menyembunyikan file besar berdasarkan ukuran/volume perubahan.
+  - Saat filter perubahan terbaru atau file besar menyembunyikan file terpilih, pilihan berpindah ke file pertama yang terlihat; jika tidak ada hasil, preview dibersihkan. Pekerjaan Git yang sudah berjalan tidak dijanjikan dapat dibatalkan.
   - Folder repo dapat diseret ke jendela untuk dibuka pada pane aktif.
   - Panel diff dapat menampilkan perubahan working tree terhadap branch lokal lain, termasuk daftar file dan isi diff; mode perubahan lokal tetap tersedia.
   - Pilihan perbandingan branch per repo kini disimpan di state dan dipulihkan saat app dibuka lagi; branch yang telah dihapus mengembalikan panel ke Local Changes.
@@ -231,6 +232,8 @@ Permintaan tambahan 2026-10-25: tombol perbesar/perkecil teks ditambahkan pada b
 Permintaan tambahan 2026-10-25: menu ukuran teks diff ditambahkan terpisah dari terminal. Daftar file, header hunk, baris kode, dan gutter nomor baris ikut skala 9–20 pt; tersedia reset dan preferensi tersimpan. Viewer file tidak berubah. Verifikasi build GUI masih pending.
 
 Permintaan tambahan 2026-10-25: isi diff sekarang digulir horizontal dan vertikal; baris kode tidak membungkus saat font diperbesar. Mode split memakai lebar kolom bersama untuk semua baris file aktif agar pemisah tetap sejajar. Verifikasi build GUI masih pending.
+
+Perubahan 2026-10-26: saat filter diff menyembunyikan file terpilih, preview kini mengikuti file pertama yang terlihat atau dikosongkan jika tidak ada hasil. Keputusan dicatat sebagai D41 di `DECISIONS.md` dan disinkronkan ke `apps-spec.md`. Build dan verifikasi GUI masih pending.
 
 Uji GUI terminal 2026-10-25: build Debug terbaru dibuka dengan empat pane. Tab uji sementara menghasilkan 10.000 baris `seq` dan 2.000 baris output bertahap; scrollbar bisa berpindah ke tengah riwayat dan input gulir kecil mengubah posisi secara konsisten. Saat output bertahap dan posisi riwayat ditahan, dua tangkapan layar menunjukkan area terminal kosong meski scrollbar tetap di posisi yang sama; teks tampil lagi setelah scrollbar digerakkan. Kelancaran frame dan penggunaan CPU belum diukur, sehingga terminal belum bisa dinyatakan sepenuhnya smooth. Tab uji ditutup dan tampilan empat pane dipulihkan.
 

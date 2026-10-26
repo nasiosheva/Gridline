@@ -138,3 +138,7 @@ Alasan: menghilangkan chrome kontrol dari area jendela memberi ruang vertikal le
 **D40. Tombol panah ditangani sesuai fokus keyboard.**
 Jika daftar file diff fokus, ↑/↓ memilih file dan ⌥↑/⌥↓ memilih hunk. Jika terminal fokus, ↑/↓ tetap menjalankan history shell. Navigasi file hanya mencakup entri yang lolos filter yang terlihat.
 Alasan: pintasan diff tidak boleh mengambil alih navigasi terminal, dan fokus visual harus menentukan konteks tombol panah.
+
+**D41. Filter daftar diff menyaring pilihan dan preview secara bersamaan.**
+Jika file terpilih tidak lolos filter aktif (file baru atau file besar), pilih file pertama yang lolos. Jika tidak ada file yang lolos, kosongkan pilihan dan preview. Perubahan ini menyelaraskan isi panel dengan daftar yang terlihat; pembatalan proses Git yang sudah berjalan tidak dijamin.
+Alasan: menyembunyikan baris tetapi membiarkan preview file tersembunyi membuat hubungan pilihan dan isi panel membingungkan. Pengurangan CPU/RAM perlu diukur terpisah.

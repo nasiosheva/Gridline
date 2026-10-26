@@ -180,6 +180,7 @@ Diff berada di area atas setiap pane sebagai tab yang tidak bisa ditutup.
 - Menu ukuran teks pada toolbar diff memperbesar atau memperkecil daftar file dan isi diff 1 pt per langkah (9–20 pt untuk kode), serta menyediakan reset. Ukuran berlaku di seluruh pane, tersimpan antarsesi, dan terpisah dari ukuran teks terminal maupun viewer file.
 - Baris kode diff tetap satu baris pada ukuran teks besar; isi diff bisa digulir horizontal dan vertikal. Lebar kolom split diseragamkan untuk seluruh baris file yang sedang dibuka supaya pasangan baris dan pemisah kolom tetap sejajar.
 - Di pane kecil, mode unified dipakai secara otomatis jika lebar area atas kurang dari batas minimum split.
+- Filter daftar diff menyembunyikan baris dan preview file yang tidak lolos, termasuk filter perubahan terbaru dan **Sembunyikan File Besar**. Jika pilihan tersembunyi, pilih file pertama yang masih terlihat; jika tidak ada file yang cocok, kosongkan pilihan dan tampilkan pesan filter. Pekerjaan Git yang sudah berjalan tidak dijanjikan dapat dibatalkan.
 
 **Navigasi**
 - Saat daftar file diff mendapat fokus, ↑/↓ memilih file sebelumnya atau berikutnya; terminal tetap memakai ↑/↓ untuk history saat terminal yang mendapat fokus.
