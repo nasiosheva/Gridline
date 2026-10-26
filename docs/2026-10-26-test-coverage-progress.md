@@ -40,3 +40,14 @@ Percobaan CLI dengan DerivedData dan package cache diarahkan ke `/private/tmp` t
 ## Tes split-grid berikutnya
 
 Dua tes `NestedPaneSplitViewTests` ditambahkan untuk membangun grid 2×2, menjaga controller pane saat konten diperbarui, membentuk ulang grid saat pane disembunyikan/dimunculkan, melaporkan fraksi divider, dan melepas observer. File `CoreLogicTests.swift` dan `GitMetadataRefreshTests.swift` lolos `swiftc -typecheck` terhadap modul Debug yang tersedia. Tes baru belum dijalankan oleh XCTest; angka coverage 76,63% di atas tidak memasukkan cakupan dari tes ini.
+
+## Verifikasi dan tes tambahan (2026-10-26)
+
+Run penuh terbaru di Xcode GUI lulus **122 tes, 0 gagal** (54,203 detik), termasuk dua tes split-grid dan seluruh tes tambahan pada `CoreLogicTests.swift` serta `GitMetadataRefreshTests.swift`. Ini menggantikan catatan run 106 tes yang gagal dan status “belum dijalankan” pada bagian sebelumnya; kegagalan lama tidak muncul kembali.
+
+Coverage dari `Test-Gridline-2026.10.26_14-22-36-+0700.xcresult`:
+
+- `Gridline.app`: **9.004 / 11.443 baris executable (78,69%)**.
+- `GridlineTests.xctest`: **3.433 / 3.481 baris executable (98,62%)**; angka ini khusus target test dan bukan coverage aplikasi.
+
+Tambahan tes mencakup kebijakan keputusan saat jumlah pane dikurangi, pilihan branch perbandingan, filter Quick Switcher, edge case layout/state, serta refresh dan snapshot metadata Git. Coverage aplikasi pada run ini masih di bawah target 80%; hasil unit test hijau tidak membuktikan seluruh UI/runtime atau integrasi OS.
