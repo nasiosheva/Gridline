@@ -511,13 +511,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hide large files or changes above the line limit"
+            "value" : "Hide large files or changes above the line limit, including their previews"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sembunyikan file besar atau perubahan di atas batas baris"
+            "value" : "Sembunyikan file besar atau perubahan di atas batas baris beserta pratinjaunya"
           }
         }
       }

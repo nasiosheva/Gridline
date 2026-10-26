@@ -160,7 +160,9 @@ struct DiffAreaView: View {
                         store: store,
                         fontSize: fontSize,
                         onOpenFile: onOpenFile,
-                        onVisibleEntriesChange: { keyboardMonitor.visibleEntryIDs = $0 },
+                        onVisibleEntriesChange: { ids in
+                            reconcileSelection(withVisibleEntryIDs: ids)
+                        },
                         isKeyboardFocused: diffHasKeyboardFocus,
                         onRequestKeyboardFocus: {
                             diffHasKeyboardFocus = true
@@ -193,10 +195,10 @@ struct DiffAreaView: View {
             keyboardMonitor.onMoveFile = { offset in
                 let entries: [DiffFileEntry]
                 if let visibleEntryIDs = keyboardMonitor.visibleEntryIDs {
-                    let entriesByID = Dictionary(uniqueKeysWithValues: store.displayedEntries.map { ($0.id, $0) })
+                    let entriesByID = Dictionary(uniqueKeysWithValues: store.visibleEntries.map { ($0.id, $0) })
                     entries = visibleEntryIDs.compactMap { entriesByID[$0] }
                 } else {
-                    entries = store.displayedEntries
+                    entries = store.visibleEntries
                 }
                 store.selectAdjacent(offset: offset, within: entries)
             }
@@ -217,6 +219,25 @@ struct DiffAreaView: View {
         }
         let newIndex = max(0, min(diff.hunks.count - 1, currentIndex + offset))
         selectedHunkID = diff.hunks[newIndex].id
+    }
+
+    private func reconcileSelection(withVisibleEntryIDs ids: [DiffFileEntry.ID]) {
+        keyboardMonitor.visibleEntryIDs = ids
+        if let selectedFileID = store.selectedFileID, ids.contains(selectedFileID) { return }
+
+        // Avoid publishing state during SwiftUI's view update. Filtering removes
+        // a selected row and its preview together, then chooses the next visible row.
+        Task { @MainActor in
+            await Task.yield()
+            guard keyboardMonitor.visibleEntryIDs == ids else { return }
+            if let currentSelection = store.selectedFileID, ids.contains(currentSelection) { return }
+            let visibleIDSet = Set(ids)
+            if let nextEntry = store.displayedEntries.first(where: { visibleIDSet.contains($0.id) }) {
+                store.select(nextEntry)
+            } else {
+                store.clearSelection()
+            }
+        }
     }
 }
 
@@ -247,20 +268,11 @@ private struct DiffFileListView: View {
     let onVisibleEntriesChange: ([String]) -> Void
     let isKeyboardFocused: Bool
     let onRequestKeyboardFocus: () -> Void
-    @State private var showRecentOnly = false
-    @State private var hideLargeFiles = false
     @State private var showsBranchComparison = false
     @State private var showsBranchPicker = false
 
-    private var filteredEntries: [DiffFileEntry] {
-        store.displayedEntries.filter { entry in
-            (!showRecentOnly || store.isComparingBranches || DiffVisibilityPolicy.isRecent(entry))
-                && (!hideLargeFiles || !DiffVisibilityPolicy.isLarge(entry))
-        }
-    }
-
     var body: some View {
-        let visibleEntries = filteredEntries
+        let visibleEntries = store.visibleEntries
         let visibleStaged = visibleEntries.filter { $0.group == .staged }
         let visibleUnstaged = visibleEntries.filter { $0.group == .unstaged }
         let visibleUntracked = visibleEntries.filter { $0.group == .untracked }
@@ -285,7 +297,7 @@ private struct DiffFileListView: View {
                 }
 
                 if !store.isComparingBranches {
-                    Toggle(isOn: $showRecentOnly) {
+                    Toggle(isOn: $store.showRecentOnly) {
                         Label(L10n.Diff.tenMinutes, systemImage: "clock")
                     }
                     .toggleStyle(.button)
@@ -293,7 +305,7 @@ private struct DiffFileListView: View {
                     .help(L10n.Diff.recentFilterHelp)
                     .accessibilityLabel(L10n.Diff.tenMinutes)
                 }
-                Toggle(isOn: $hideLargeFiles) {
+                Toggle(isOn: $store.hideLargeFiles) {
                     Label(L10n.Diff.hideLargeFiles, systemImage: "doc.badge.ellipsis")
                 }
                 .toggleStyle(.button)

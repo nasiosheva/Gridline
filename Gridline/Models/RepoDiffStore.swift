@@ -35,6 +35,8 @@ final class RepoDiffStore: ObservableObject {
     @Published private(set) var comparisonBaseBranch: String?
     @Published private(set) var comparisonTargetBranch: String?
     @Published private(set) var hasLoadedInitialStatus = false
+    @Published var showRecentOnly = false
+    @Published var hideLargeFiles = false
 
     private var watcher: RepoFileWatcher?
     private var metadataWatcher: GitMetadataWatcher?
@@ -61,6 +63,13 @@ final class RepoDiffStore: ObservableObject {
 
     var displayedEntries: [DiffFileEntry] {
         isComparingBranches || comparisonBranch != nil ? comparisonEntries : allEntries
+    }
+
+    var visibleEntries: [DiffFileEntry] {
+        displayedEntries.filter { entry in
+            (!showRecentOnly || isComparingBranches || DiffVisibilityPolicy.isRecent(entry))
+                && (!hideLargeFiles || !DiffVisibilityPolicy.isLarge(entry))
+        }
     }
 
     var isComparingBranches: Bool {
@@ -192,10 +201,15 @@ final class RepoDiffStore: ObservableObject {
                 }
             }
 
-            if let selectedFileID, displayedEntries.contains(where: { $0.id == selectedFileID }) {
+            if let selectedFileID, visibleEntries.contains(where: { $0.id == selectedFileID }) {
                 await loadDiffForSelection()
             } else {
-                selectedFileID = displayedEntries.first?.id
+                let nextSelection = visibleEntries.first?.id
+                if selectedFileID != nextSelection {
+                    diffLoadToken = UUID()
+                    selectedDiff = nil
+                }
+                selectedFileID = nextSelection
                 await loadDiffForSelection()
             }
         } while refreshRequestedAgain
@@ -275,8 +289,16 @@ final class RepoDiffStore: ObservableObject {
 
     func select(_ entry: DiffFileEntry) {
         guard selectedFileID != entry.id else { return }
+        diffLoadToken = UUID()
         selectedFileID = entry.id
+        selectedDiff = nil
         Task { await loadDiffForSelection() }
+    }
+
+    func clearSelection() {
+        diffLoadToken = UUID()
+        selectedFileID = nil
+        selectedDiff = nil
     }
 
     /// Pilih file sebelumnya/berikutnya dalam urutan staged → unstaged → untracked (↑/↓ bagian 6).
@@ -292,7 +314,8 @@ final class RepoDiffStore: ObservableObject {
     }
 
     private func loadDiffForSelection() async {
-        guard let selectedFileID, let entry = displayedEntries.first(where: { $0.id == selectedFileID }) else {
+        guard let selectedFileID, let entry = visibleEntries.first(where: { $0.id == selectedFileID }) else {
+            diffLoadToken = UUID()
             selectedDiff = nil
             return
         }
