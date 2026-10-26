@@ -469,19 +469,30 @@ private struct DiffFileListView: View {
             if let comparedBranch = store.comparisonBranch {
                 HStack(spacing: 5) {
                     branchPickerButton(currentBranchName, color: .cyan, showsBranchIcon: true)
-                    swapBranchesButton
+                    comparisonSeparator
                     branchPickerButton(comparedBranch, color: .orange)
                 }
             } else if let baseBranch = store.comparisonBaseBranch,
                       let targetBranch = store.comparisonTargetBranch {
-                // Dua branch dibandingkan langsung (dasar → target), bukan
-                // "branch aktif" vs "branch pembanding" — apps-spec.md
-                // mendokumentasikan keduanya memakai warna yang sama di sini,
-                // beda dari pasangan warna asimetris di mode satu branch di atas.
+                // Dasar/target bisa jadi branch mana pun, tidak harus branch
+                // yang sedang checked out — tanpa current branch ikut
+                // ditampilkan, warna cyan+ikon pada dasar/target gampang
+                // disalahartikan sebagai branch aktif (identik dengan header
+                // pane). Current branch ditampilkan cyan+ikon (sama seperti
+                // header); yang lain oranye (D44). Saat dasar atau target
+                // kebetulan sama dengan current, warnanya "menyatu" di posisi
+                // itu (bukan diulang terpisah) supaya tidak ada nama branch
+                // yang tampil dua kali berturut-turut.
+                let baseIsCurrent = baseBranch == currentBranchName
+                let targetIsCurrent = !baseIsCurrent && targetBranch == currentBranchName
                 HStack(spacing: 5) {
-                    branchPickerButton(baseBranch, color: .cyan, showsBranchIcon: true)
-                    swapBranchesButton
-                    branchPickerButton(targetBranch, color: .cyan)
+                    if !baseIsCurrent && !targetIsCurrent {
+                        branchPickerButton(currentBranchName, color: .cyan, showsBranchIcon: true)
+                        comparisonSeparator
+                    }
+                    branchPickerButton(baseBranch, color: baseIsCurrent ? .cyan : .orange, showsBranchIcon: baseIsCurrent)
+                    comparisonSeparator
+                    branchPickerButton(targetBranch, color: targetIsCurrent ? .cyan : .orange, showsBranchIcon: targetIsCurrent)
                 }
             } else {
                 Button {
@@ -510,17 +521,10 @@ private struct DiffFileListView: View {
         }
     }
 
-    private var swapBranchesButton: some View {
-        Button {
-            store.swapComparisonBranches()
-        } label: {
-            Image(systemName: "arrow.left.arrow.right")
-                .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.borderless)
-        .help(L10n.Diff.swapBranches)
-        .accessibilityLabel(L10n.Diff.swapBranches)
-        .disabled(!store.isComparingBranches && store.headerStatus?.branch == nil)
+    private var comparisonSeparator: some View {
+        Image(systemName: "chevron.compact.right")
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
     }
 
     private func branchPickerButton(_ branch: String, color: Color, showsBranchIcon: Bool = false) -> some View {

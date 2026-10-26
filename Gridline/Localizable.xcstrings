@@ -790,22 +790,6 @@
         }
       }
     },
-    "diff.swap_branches" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Swap base and target branches"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tukar branch dasar dan tujuan"
-          }
-        }
-      }
-    },
     "diff.text_size" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Diff text size" } },

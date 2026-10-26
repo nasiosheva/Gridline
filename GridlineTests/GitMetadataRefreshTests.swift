@@ -414,30 +414,6 @@ final class RepoDiffStoreTests: XCTestCase {
         XCTAssertTrue(store.ignored.isEmpty)
     }
 
-    func testSwapComparisonBranchesSupportsBothSelectionModes() async throws {
-        let repository = try TemporaryGitRepository()
-        try repository.git("branch", "comparison")
-        try repository.advanceBranch("comparison", fileContents: "comparison\n")
-        let store = RepoDiffStore(repoPath: repository.url.path)
-        await store.refresh()
-
-        store.selectComparisonBranch("comparison")
-        try await waitUntil { !store.isLoadingComparison }
-        store.swapComparisonBranches()
-        try await waitUntil { store.isComparingBranches && !store.isLoadingComparison }
-        XCTAssertEqual(store.comparisonBaseBranch, "main")
-        XCTAssertEqual(store.comparisonTargetBranch, "comparison")
-
-        store.swapComparisonBranches()
-        try await waitUntil { store.comparisonBaseBranch == "comparison" && !store.isLoadingComparison }
-        XCTAssertEqual(store.comparisonTargetBranch, "main")
-
-        store.selectComparisonBranch(nil)
-        try await waitUntil { !store.isComparingBranches }
-        store.swapComparisonBranches()
-        XCTAssertFalse(store.isComparingBranches)
-    }
-
     func testPullFromUpstreamRequiresLoadedBehindBranchAndRefreshesAfterPull() async throws {
         let repository = try TemporaryGitRepository()
         let store = RepoDiffStore(repoPath: repository.url.path)

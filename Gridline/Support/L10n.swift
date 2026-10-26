@@ -144,7 +144,6 @@ enum L10n {
         static let branchComparisonLabel: LocalizedStringResource = "diff.branch_comparison_label"
         static let baseBranch: LocalizedStringResource = "diff.base_branch"
         static let targetBranch: LocalizedStringResource = "diff.target_branch"
-        static let swapBranches: LocalizedStringResource = "diff.swap_branches"
         static let applyBranchComparison: LocalizedStringResource = "diff.apply_branch_comparison"
         static let notEnoughBranches: LocalizedStringResource = "diff.not_enough_branches"
         static let recentFilterHelp: LocalizedStringResource = "diff.recent_filter_help"

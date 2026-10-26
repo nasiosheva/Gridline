@@ -340,16 +340,6 @@ final class RepoDiffStore: ObservableObject {
         Task { await loadComparisonEntries(from: baseBranch, to: targetBranch, token: loadToken) }
     }
 
-    func swapComparisonBranches() {
-        if let baseBranch = comparisonBaseBranch,
-           let targetBranch = comparisonTargetBranch {
-            selectComparisonBranches(from: targetBranch, to: baseBranch)
-        } else if let comparedBranch = comparisonBranch,
-                  let currentBranch = headerStatus?.branch {
-            selectComparisonBranches(from: currentBranch, to: comparedBranch)
-        }
-    }
-
     private func loadComparisonEntries(against branch: String, token: UUID) async {
         defer {
             if comparisonLoadToken == token { isLoadingComparison = false }
