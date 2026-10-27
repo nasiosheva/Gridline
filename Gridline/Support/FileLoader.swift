@@ -45,6 +45,8 @@ enum FileLoader {
     ]
 
     nonisolated static func fingerprint(path: String) -> FileFingerprint? {
+        let span = PerformanceTrace.shared.begin(.fileFingerprint)
+        defer { PerformanceTrace.shared.end(span) }
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
         guard fm.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue,
@@ -53,6 +55,8 @@ enum FileLoader {
     }
 
     nonisolated static func load(path: String) -> FileLoadResult {
+        let span = PerformanceTrace.shared.begin(.fileLoad)
+        defer { PerformanceTrace.shared.end(span) }
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
         guard fm.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue else {

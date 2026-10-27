@@ -51,3 +51,9 @@ Coverage dari `Test-Gridline-2026.10.26_14-22-36-+0700.xcresult`:
 - `GridlineTests.xctest`: **3.433 / 3.481 baris executable (98,62%)**; angka ini khusus target test dan bukan coverage aplikasi.
 
 Tambahan tes mencakup kebijakan keputusan saat jumlah pane dikurangi, pilihan branch perbandingan, filter Quick Switcher, edge case layout/state, serta refresh dan snapshot metadata Git. Coverage aplikasi pada run ini masih di bawah target 80%; hasil unit test hijau tidak membuktikan seluruh UI/runtime atau integrasi OS.
+
+## PERF-01: kontrak output sebelum optimasi
+
+Sembilan test kontrak ditambahkan di `PerformanceOutputContractTests` dan `PerformancePolicyOutputContractTests`, memakai helper repo sementara yang sama dengan test Git existing. Kontrak mencakup urutan status/counts, path Unicode/spasi/tab/newline/apostrof, payload raw diff dan command copy, merge-base dua branch divergen, line numbers dengan UUID model baru, metadata file yang tetap sama saat isi berubah, refresh bersamaan, selection sesudah filter, tree/natural sort, serta tie-breaking/rentang Unicode word diff. Tidak ada perubahan source aplikasi.
+
+**25 test terarah lulus, 0 gagal**, melalui native XCTest tanpa app host pada 2026-10-26 23:56 WIB: sembilan test baru dan 16 test Git/parser/watcher/policy existing. Modul pengujian fallback mengompilasi 14 file produksi yang diperlukan secara langsung dari source. Ini bukan pengukuran coverage baru dan bukan hasil test penuh scheme Gridline. Percobaan scheme penuh terhenti sebelum kompilasi akibat pembatasan cache/resolver SwiftPM sandbox; UI test tidak dilanjutkan. Source baseline masih memiliki warning isolasi pada `flatMap(leafEntries)` di `DiffFileTreePolicy`.

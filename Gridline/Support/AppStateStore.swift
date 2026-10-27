@@ -94,7 +94,14 @@ final class AppStateStore: ObservableObject {
 
     private func persist() {
         do {
-            let data = try JSONEncoder().encode(state)
+            let data: Data
+            do {
+                let span = PerformanceTrace.shared.begin(.stateEncode)
+                defer { PerformanceTrace.shared.end(span) }
+                data = try JSONEncoder().encode(state)
+            }
+            let writeSpan = PerformanceTrace.shared.begin(.stateWrite)
+            defer { PerformanceTrace.shared.end(writeSpan) }
             if !hasEnsuredDirectoryExists {
                 try FileManager.default.createDirectory(
                     at: fileURL.deletingLastPathComponent(),
@@ -112,7 +119,10 @@ final class AppStateStore: ObservableObject {
         deferredPersistTask?.cancel()
         deferredPersistTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                PerformanceTrace.shared.increment(.persistenceCancelled)
+                return
+            }
             self?.persist()
         }
     }

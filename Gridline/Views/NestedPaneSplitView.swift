@@ -126,6 +126,8 @@ final class PaneGridRootViewController: NSViewController {
         coordinator: NestedPaneSplitView.Coordinator
     ) {
         self.coordinator = coordinator
+        let span = PerformanceTrace.shared.begin(.paneUpdate)
+        defer { PerformanceTrace.shared.end(span, itemCount: items.count) }
         let retainedIDs = Set(retainedPaneIDs)
         let removedIDs = hostingControllers.keys.filter { !retainedIDs.contains($0) }
         for id in removedIDs {
@@ -160,6 +162,8 @@ final class PaneGridRootViewController: NSViewController {
     }
 
     private func rebuild(with items: [PaneGridItem], coordinator: NestedPaneSplitView.Coordinator) {
+        let span = PerformanceTrace.shared.begin(.paneRebuild)
+        defer { PerformanceTrace.shared.end(span, itemCount: items.count) }
         coordinator.stopObserving()
         // Keep each pane's hosting controller alive while its tile is outside
         // the selected view. Only detach it from the current split hierarchy.

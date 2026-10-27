@@ -641,6 +641,192 @@ final class GitDiffServiceTests: XCTestCase {
     }
 }
 
+@MainActor
+final class PerformanceOutputContractTests: XCTestCase {
+    private static let specialPaths = ["café.txt", "line\nbreak.txt", "quote'file.txt", "spaced name.txt", "tab\tfile.txt"]
+
+    func testMixedStatusPreservesOrderCountsSpecialPathsAndIgnoredOptIn() async throws {
+        let repository = try makeMixedStatusRepository()
+        let ordinary = await GitDiffService.statusSnapshot(at: repository.url.path)
+        let includingIgnored = await GitDiffService.statusSnapshot(at: repository.url.path, includeIgnored: true)
+        let expected = [
+            "unstaged:binary.bin|M|-|-",
+            "staged:deleted.txt|D|0|1",
+            "staged:dual.txt|M|1|1",
+            "unstaged:dual.txt|M|1|1",
+            "staged:renamed café.txt|R|0|0",
+            "staged:staged.txt|A|1|0",
+        ] + Self.specialPaths.map { "untracked:\($0)|U|1|0" }
+
+        XCTAssertEqual(entrySnapshot(ordinary.entries), expected)
+        XCTAssertEqual(entrySnapshot(includingIgnored.entries), expected + ["ignored:ignored/|I|-|-"])
+        XCTAssertEqual(ordinary.headerStatus?.branch, "main")
+        let renamed = try XCTUnwrap(ordinary.entries.first { $0.path == "renamed café.txt" })
+        XCTAssertEqual(renamed.status, .renamed(from: "tracked.txt"))
+    }
+
+    func testRawDiffLineNumbersAndHighlightRemainEquivalentAcrossNewModelIDs() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.write("tracked.txt", contents: "updated\n")
+        let entry = DiffFileEntry(path: "tracked.txt", group: .unstaged, status: .modified)
+        let first = await GitDiffService.fileDiff(at: repository.url.path, for: entry)
+        let second = await GitDiffService.fileDiff(at: repository.url.path, for: entry)
+        let expectedRaw = try repository.git("diff", "--", "tracked.txt")
+        let expectedLines = [
+            "@@ -1 +1 @@",
+            "deletion|1|-|initial",
+            "addition|-|1|updated",
+            "context|2|2|",
+        ]
+
+        XCTAssertEqual(first.rawText, expectedRaw)
+        XCTAssertEqual(second.rawText, expectedRaw)
+        XCTAssertEqual(lineSnapshot(first), expectedLines)
+        XCTAssertEqual(lineSnapshot(second), expectedLines)
+        XCTAssertNotEqual(first.hunks.first?.id, second.hunks.first?.id)
+        XCTAssertNotEqual(first.hunks.first?.lines.first?.id, second.hunks.first?.lines.first?.id)
+        XCTAssertFalse(first.isBinary)
+        let ranges = WordDiffPolicy.changedRanges(old: "initial", new: "updated")
+        XCTAssertEqual(ranges.old, [0..<7])
+        XCTAssertEqual(ranges.new, [0..<7])
+    }
+
+    func testDivergedBranchComparisonUsesMergeBaseAndPreservesRawCopyPayload() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.git("branch", "comparison")
+        try repository.advanceBranch("main", fileContents: "main side\n")
+        try repository.advanceBranch("comparison", fileContents: "topic side\n")
+        let entries = await GitDiffService.comparisonEntries(at: repository.url.path, from: "main", to: "comparison")
+        XCTAssertEqual(entrySnapshot(entries), ["unstaged:tracked.txt|M|1|1"])
+        let entry = try XCTUnwrap(entries.first)
+        let diff = await GitDiffService.fileDiff(at: repository.url.path, from: "main", to: "comparison", for: entry)
+
+        XCTAssertEqual(diff.rawText, try repository.git("diff", "--no-ext-diff", "main...comparison", "--", "tracked.txt"))
+        XCTAssertTrue(diff.rawText.contains("-initial\n+topic side\n"))
+        XCTAssertFalse(diff.rawText.contains("-main side"))
+    }
+
+    func testRefreshDoesNotReuseDiffWhenSizeAndModificationDateStayEqual() async throws {
+        let repository = try TemporaryGitRepository()
+        let path = repository.url.appendingPathComponent("tracked.txt").path
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        try repository.write("tracked.txt", contents: "alpha\n")
+        try FileManager.default.setAttributes([.modificationDate: timestamp], ofItemAtPath: path)
+        let store = RepoDiffStore(repoPath: repository.url.path)
+        await store.refresh()
+        let firstEntry = try XCTUnwrap(store.unstaged.first)
+        let firstRaw = try XCTUnwrap(store.selectedDiff?.rawText)
+
+        try repository.write("tracked.txt", contents: "bravo\n")
+        try FileManager.default.setAttributes([.modificationDate: timestamp], ofItemAtPath: path)
+        await store.refresh()
+
+        XCTAssertEqual(store.unstaged.first, firstEntry)
+        XCTAssertNotEqual(store.selectedDiff?.rawText, firstRaw)
+        XCTAssertEqual(store.selectedDiff?.rawText, try repository.git("diff", "--", "tracked.txt"))
+        XCTAssertTrue(store.selectedDiff?.rawText.contains("+bravo") == true)
+    }
+
+    func testRefreshBurstWaitersReceiveCompleteCurrentState() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.write("tracked.txt", contents: "burst\n")
+        let store = RepoDiffStore(repoPath: repository.url.path)
+        let requests = (0..<8).map { _ in Task { await store.refresh() } }
+        for request in requests {
+            await request.value
+            XCTAssertFalse(store.isRefreshing)
+            XCTAssertEqual(store.selectedDiff?.rawText, try repository.git("diff", "--", "tracked.txt"))
+        }
+        XCTAssertEqual(store.selectedFileID, "unstaged:tracked.txt")
+        XCTAssertEqual(entrySnapshot(store.unstaged), ["unstaged:tracked.txt|M|1|1"])
+    }
+
+    func testRefreshReconcilesSelectionAndPreviewWhenFilterHidesEveryEntry() async throws {
+        let repository = try TemporaryGitRepository()
+        try repository.write("new.txt", contents: "untracked\n")
+        let store = RepoDiffStore(repoPath: repository.url.path)
+        await store.refresh()
+        XCTAssertEqual(store.selectedFileID, "untracked:new.txt")
+        XCTAssertNotNil(store.selectedDiff)
+
+        store.hideUntrackedFiles = true
+        await store.refresh()
+        XCTAssertTrue(store.visibleEntries.isEmpty)
+        XCTAssertNil(store.selectedFileID)
+        XCTAssertNil(store.selectedDiff)
+        XCTAssertEqual(store.totalChangedFileCount, 1)
+
+        store.hideUntrackedFiles = false
+        await store.refresh()
+        XCTAssertEqual(store.selectedFileID, "untracked:new.txt")
+        XCTAssertTrue(store.selectedDiff?.rawText.contains("+untracked") == true)
+    }
+
+    func testCopyCommandsPreserveSpecialPathCharactersAndStagedAction() {
+        let cases = [
+            ("café.txt", "git add 'café.txt'"),
+            ("line\nbreak.txt", "git add 'line\nbreak.txt'"),
+            ("quote'file.txt", "git add 'quote'\\''file.txt'"),
+            ("spaced name.txt", "git add 'spaced name.txt'"),
+            ("tab\tfile.txt", "git add 'tab\tfile.txt'"),
+        ]
+        for (path, expected) in cases {
+            let entry = DiffFileEntry(path: path, group: .untracked, status: .untracked)
+            XCTAssertEqual(GitDiffService.toggleStageCommand(for: entry), expected)
+        }
+        let staged = DiffFileEntry(path: "quote'file.txt", group: .staged, status: .added)
+        XCTAssertEqual(GitDiffService.toggleStageCommand(for: staged), "git restore --staged 'quote'\\''file.txt'")
+    }
+
+    private func makeMixedStatusRepository() throws -> TemporaryGitRepository {
+        let repository = try TemporaryGitRepository()
+        try repository.git("config", "color.ui", "false")
+        try repository.git("config", "core.autocrlf", "false")
+        try repository.write(".gitignore", contents: "ignored/\n")
+        try repository.write("dual.txt", contents: "before\n")
+        try repository.write("deleted.txt", contents: "remove\n")
+        try repository.write("binary.bin", data: Data([0, 1, 2, 3]))
+        try repository.git("add", ".")
+        try repository.git("commit", "--quiet", "-m", "output contract baseline")
+        try repository.git("mv", "tracked.txt", "renamed café.txt")
+        try repository.git("rm", "--quiet", "deleted.txt")
+        try repository.write("dual.txt", contents: "staged\n")
+        try repository.write("staged.txt", contents: "added\n")
+        try repository.git("add", "dual.txt", "staged.txt")
+        try repository.write("dual.txt", contents: "working\n")
+        try repository.write("binary.bin", data: Data([0, 9, 8, 7]))
+        for path in Self.specialPaths {
+            try repository.write(path, contents: "new\n")
+        }
+        try repository.write("ignored/child.txt", contents: "ignored\n")
+        return repository
+    }
+
+    private func entrySnapshot(_ entries: [DiffFileEntry]) -> [String] {
+        entries.map { entry in
+            let additions = entry.additions.map(String.init) ?? "-"
+            let deletions = entry.deletions.map(String.init) ?? "-"
+            return "\(entry.id)|\(entry.status.letter)|\(additions)|\(deletions)"
+        }
+    }
+
+    private func lineSnapshot(_ diff: FileDiff) -> [String] {
+        diff.hunks.flatMap { hunk in
+            [hunk.header] + hunk.lines.map { line in
+                let kind: String
+                switch line.kind {
+                case .context: kind = "context"
+                case .addition: kind = "addition"
+                case .deletion: kind = "deletion"
+                }
+                let oldLine = line.oldLineNumber.map(String.init) ?? "-"
+                let newLine = line.newLineNumber.map(String.init) ?? "-"
+                return "\(kind)|\(oldLine)|\(newLine)|\(line.text)"
+            }
+        }
+    }
+}
+
 private final class TemporaryGitRepository {
     let url: URL
 
@@ -658,6 +844,16 @@ private final class TemporaryGitRepository {
 
     deinit {
         try? FileManager.default.removeItem(at: url)
+    }
+
+    func write(_ relativePath: String, contents: String) throws {
+        try write(relativePath, data: Data(contents.utf8))
+    }
+
+    func write(_ relativePath: String, data: Data) throws {
+        let file = url.appendingPathComponent(relativePath)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: file)
     }
 
     func advanceBranch(_ branch: String, fileContents: String? = nil) throws {

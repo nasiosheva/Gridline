@@ -59,7 +59,9 @@ final class RepoFileWatcher {
 
         stream = streamRef
         FSEventStreamSetDispatchQueue(streamRef, DispatchQueue.main)
-        FSEventStreamStart(streamRef)
+        if !FSEventStreamStart(streamRef) {
+            PerformanceTrace.shared.increment(.fileWatcherStartFailed)
+        }
     }
 
     func stop() {

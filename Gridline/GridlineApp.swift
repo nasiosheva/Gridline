@@ -35,6 +35,9 @@ struct GridlineApp: App {
         _topAreaStoreRegistry = StateObject(wrappedValue: topAreaStoreRegistry)
 
         DiagnosticLog.shared.record(.appLaunched)
+        #if DEBUG
+        PerformanceTraceExporter.startIfNeeded()
+        #endif
     }
 
     var body: some Scene {

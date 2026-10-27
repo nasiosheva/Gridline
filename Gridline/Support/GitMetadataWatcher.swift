@@ -82,6 +82,8 @@ final class GitMetadataWatcher {
     }
 
     private static func snapshot(gitDirectory: URL, commonDirectory: URL, watchedBranches: [String]) -> Snapshot {
+        let span = PerformanceTrace.shared.begin(.metadataSnapshot)
+        defer { PerformanceTrace.shared.end(span) }
         let head = try? Data(contentsOf: gitDirectory.appendingPathComponent("HEAD"))
         let refName = head.flatMap { String(data: $0, encoding: .utf8) }
             .flatMap { $0.hasPrefix("ref: refs/") ? String($0.dropFirst("ref: ".count)).trimmingCharacters(in: .whitespacesAndNewlines) : nil }

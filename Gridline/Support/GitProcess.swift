@@ -22,7 +22,9 @@ enum GitProcess {
         at path: String,
         environment additionalEnvironment: [String: String] = [:]
     ) async -> Output {
-        await withCheckedContinuation { continuation in
+        let span = PerformanceTrace.shared.begin(.gitRequest)
+        defer { PerformanceTrace.shared.end(span) }
+        return await withCheckedContinuation { continuation in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = ["git", "-C", path] + arguments
@@ -52,7 +54,9 @@ enum GitProcess {
 
             do {
                 try process.run()
+                PerformanceTrace.shared.increment(.gitLaunched)
             } catch {
+                PerformanceTrace.shared.increment(.gitLaunchFailed)
                 process.terminationHandler = nil
                 try? stdoutPipe.fileHandleForWriting.close()
                 try? stderrPipe.fileHandleForWriting.close()
@@ -107,6 +111,8 @@ nonisolated private final class PipeOutputBuffer: @unchecked Sendable {
     }
 
     var string: String {
+        let span = PerformanceTrace.shared.begin(.gitDecode)
+        defer { PerformanceTrace.shared.end(span) }
         lock.lock()
         defer { lock.unlock() }
         return String(data: data, encoding: .utf8) ?? ""

@@ -158,10 +158,15 @@ final class RepoDiffStore: ObservableObject {
 
     func refresh() async {
         guard isGitAvailable else { return }
+        let span = PerformanceTrace.shared.begin(.refresh)
+        defer { PerformanceTrace.shared.end(span) }
 
         if let activeRefreshTask {
+            PerformanceTrace.shared.increment(.refreshCoalesced)
             refreshRequestedAgain = true
+            let waitSpan = PerformanceTrace.shared.begin(.refreshWait)
             await activeRefreshTask.value
+            PerformanceTrace.shared.end(waitSpan)
             return
         }
 
@@ -182,12 +187,14 @@ final class RepoDiffStore: ObservableObject {
         repeat {
             refreshRequestedAgain = false
             let shouldLoadBranches = shouldRefreshComparisonBranches
+            PerformanceTrace.shared.increment(shouldLoadBranches ? .branchCacheMiss : .branchCacheHit)
             let cachedBranches = availableComparisonBranches
             async let refreshedStatus = GitDiffService.statusSnapshot(at: repoPath, includeIgnored: showIgnoredFiles)
             async let refreshedBranches = shouldLoadBranches
                 ? GitDiffService.comparisonBranches(at: repoPath)
                 : cachedBranches
             let (snapshot, branches) = await (refreshedStatus, refreshedBranches)
+            let publishSpan = PerformanceTrace.shared.begin(.refreshPublish)
             staged = snapshot.entries.filter { $0.group == .staged }
             unstaged = snapshot.entries.filter { $0.group == .unstaged }
             untracked = snapshot.entries.filter { $0.group == .untracked }
@@ -201,6 +208,7 @@ final class RepoDiffStore: ObservableObject {
                 availableComparisonBranches = branches
                 comparisonBranchesLoadedAt = .now
             }
+            PerformanceTrace.shared.end(publishSpan, itemCount: snapshot.entries.count)
 
             if let pendingInitialBranch = initialComparisonBranch,
                !availableComparisonBranches.isEmpty {
@@ -225,6 +233,8 @@ final class RepoDiffStore: ObservableObject {
                     if self.comparisonBaseBranch == comparisonBaseBranch,
                        self.comparisonTargetBranch == comparisonTargetBranch {
                         comparisonEntries = entries
+                    } else {
+                        PerformanceTrace.shared.increment(.staleComparisonDiscarded)
                     }
                 } else if !availableComparisonBranches.isEmpty {
                     self.comparisonBaseBranch = nil
@@ -242,6 +252,8 @@ final class RepoDiffStore: ObservableObject {
                 let entries = await GitDiffService.comparisonEntries(at: repoPath, against: comparisonBranch)
                 if self.comparisonBranch == comparisonBranch, !isComparingBranches {
                     comparisonEntries = entries
+                } else {
+                    PerformanceTrace.shared.increment(.staleComparisonDiscarded)
                 }
             }
 
@@ -347,7 +359,10 @@ final class RepoDiffStore: ObservableObject {
         let entries = await GitDiffService.comparisonEntries(at: repoPath, against: branch)
         guard comparisonLoadToken == token,
               comparisonBranch == branch,
-              !isComparingBranches else { return }
+              !isComparingBranches else {
+            PerformanceTrace.shared.increment(.staleComparisonDiscarded)
+            return
+        }
         comparisonEntries = entries
         selectedFileID = entries.first?.id
         await loadDiffForSelection()
@@ -360,7 +375,10 @@ final class RepoDiffStore: ObservableObject {
         let entries = await GitDiffService.comparisonEntries(at: repoPath, from: baseBranch, to: targetBranch)
         guard comparisonLoadToken == token,
               comparisonBaseBranch == baseBranch,
-              comparisonTargetBranch == targetBranch else { return }
+              comparisonTargetBranch == targetBranch else {
+            PerformanceTrace.shared.increment(.staleComparisonDiscarded)
+            return
+        }
         comparisonEntries = entries
         selectedFileID = entries.first?.id
         await loadDiffForSelection()
@@ -398,6 +416,8 @@ final class RepoDiffStore: ObservableObject {
             selectedDiff = nil
             return
         }
+        let span = PerformanceTrace.shared.begin(.diffLoad)
+        defer { PerformanceTrace.shared.end(span) }
         let token = UUID()
         diffLoadToken = token
         let diff: FileDiff
@@ -413,7 +433,12 @@ final class RepoDiffStore: ObservableObject {
         } else {
             diff = await GitDiffService.fileDiff(at: repoPath, for: entry)
         }
-        guard diffLoadToken == token else { return }
+        guard diffLoadToken == token else {
+            PerformanceTrace.shared.increment(.staleDiffDiscarded)
+            return
+        }
+        let publishSpan = PerformanceTrace.shared.begin(.diffPublish)
         selectedDiff = diff
+        PerformanceTrace.shared.end(publishSpan, itemCount: diff.hunks.count)
     }
 }

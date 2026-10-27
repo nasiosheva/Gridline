@@ -1886,6 +1886,112 @@ final class SearchAndBranchSelectionPolicyTests: XCTestCase {
 }
 
 @MainActor
+final class PerformancePolicyOutputContractTests: XCTestCase {
+    func testTreeAndKeyboardOrderKeepCompactFoldersAndNaturalSort() throws {
+        let paths = [
+            "Sources/App/file10.swift",
+            "README.md",
+            "Sources/App/Utils/value.swift",
+            "Sources/App/file2.swift",
+        ]
+        let entries = paths.map { DiffFileEntry(path: $0, group: .unstaged, status: .modified) }
+        let tree = DiffFileTreePolicy.tree(from: entries)
+
+        XCTAssertEqual(tree.map(\.id), ["folder:Sources/App", "unstaged:README.md"])
+        XCTAssertEqual(tree.map(\.name), ["Sources/App", "README.md"])
+        let sourceFolder = try XCTUnwrap(tree.first)
+        XCTAssertEqual(sourceFolder.children.map(\.name), ["Utils", "file2.swift", "file10.swift"])
+        XCTAssertEqual(DiffFileTreePolicy.orderedEntries(from: entries).map(\.path), [
+            "Sources/App/Utils/value.swift",
+            "Sources/App/file2.swift",
+            "Sources/App/file10.swift",
+            "README.md",
+        ])
+    }
+
+    func testWordDiffKeepsTieBreakingAndUnicodeCharacterRanges() {
+        let tied = WordDiffPolicy.changedRanges(old: "a b", new: "b a")
+        XCTAssertEqual(tied.old, [0..<2])
+        XCTAssertEqual(tied.new, [1..<3])
+
+        let unicode = WordDiffPolicy.changedRanges(old: "😀 café = 1", new: "😀 café = 2")
+        XCTAssertEqual(unicode.old, [9..<10])
+        XCTAssertEqual(unicode.new, [9..<10])
+    }
+}
+
+@MainActor
+final class PerformanceTraceTests: XCTestCase {
+    func testDisabledCollectorRecordsNothing() {
+        let trace = PerformanceTrace(isEnabled: false, sampleCapacity: 1)
+        XCTAssertNil(trace.begin(.gitRequest))
+        trace.increment(.gitLaunched)
+        trace.end(nil)
+        let snapshot = trace.snapshot()
+        XCTAssertTrue(snapshot.samples.isEmpty)
+        XCTAssertTrue(snapshot.counters.isEmpty)
+        XCTAssertEqual(snapshot.activeSpanCount, 0)
+        XCTAssertEqual(snapshot.peakGitRequests, 0)
+    }
+
+    func testBoundedSamplesTrackRequestsAndRejectDuplicateOrForeignCompletion() throws {
+        let trace = PerformanceTrace(isEnabled: true, sampleCapacity: 2)
+        try XCTSkipUnless(trace.isEnabled, "Performance measurements are disabled outside DEBUG.")
+        let first = try XCTUnwrap(trace.begin(.gitRequest))
+        let second = try XCTUnwrap(trace.begin(.gitRequest))
+        let parsing = try XCTUnwrap(trace.begin(.diffParse))
+        trace.increment(.gitLaunched)
+        trace.increment(.gitLaunched)
+        XCTAssertFalse(trace.reset())
+
+        let other = PerformanceTrace(isEnabled: true)
+        other.end(first)
+        XCTAssertTrue(other.snapshot().samples.isEmpty)
+        trace.end(first)
+        trace.end(first)
+        trace.end(parsing, itemCount: 3)
+        trace.end(second)
+
+        let snapshot = trace.snapshot()
+        XCTAssertEqual(snapshot.samples.map(\.stage), [.diffParse, .gitRequest])
+        XCTAssertEqual(snapshot.samples.map(\.measurement), [.synchronous, .elapsed])
+        XCTAssertEqual(snapshot.samples.first?.itemCount, 3)
+        XCTAssertEqual(snapshot.samples.first?.startedOnMainThread, Thread.isMainThread)
+        XCTAssertEqual(snapshot.samples.first?.finishedOnMainThread, Thread.isMainThread)
+        XCTAssertEqual(snapshot.activeSpanCount, 0)
+        XCTAssertEqual(snapshot.activeGitRequests, 0)
+        XCTAssertEqual(snapshot.peakGitRequests, 2)
+        XCTAssertEqual(snapshot.droppedSampleCount, 1)
+        XCTAssertEqual(snapshot.counters[PerformanceTrace.Counter.gitLaunched.rawValue], 2)
+        XCTAssertTrue(trace.reset())
+        XCTAssertTrue(trace.snapshot().samples.isEmpty)
+        XCTAssertTrue(trace.snapshot().counters.isEmpty)
+        XCTAssertEqual(trace.snapshot().peakGitRequests, 0)
+    }
+
+    func testConcurrentMeasurementsKeepCountersAndSamplesConsistent() async throws {
+        let trace = PerformanceTrace(isEnabled: true, sampleCapacity: 16)
+        try XCTSkipUnless(trace.isEnabled, "Performance measurements are disabled outside DEBUG.")
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<20 {
+                group.addTask {
+                    let span = trace.begin(.gitRequest)
+                    trace.increment(.gitLaunched)
+                    trace.end(span)
+                }
+            }
+        }
+        let snapshot = trace.snapshot()
+        XCTAssertEqual(snapshot.samples.count, 16)
+        XCTAssertEqual(snapshot.droppedSampleCount, 4)
+        XCTAssertEqual(snapshot.counters[PerformanceTrace.Counter.gitLaunched.rawValue], 20)
+        XCTAssertEqual(snapshot.activeGitRequests, 0)
+        XCTAssertEqual(snapshot.activeSpanCount, 0)
+        XCTAssertGreaterThan(snapshot.peakGitRequests, 0)
+    }
+}
+
+@MainActor
 private final class TemporaryTestDirectory {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("GridlineCoreTests-\(UUID().uuidString)", isDirectory: true)

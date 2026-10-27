@@ -46,6 +46,8 @@ enum GitDiffService {
     }
 
     nonisolated private static func comparisonEntries(at path: String, revisions: [String], readWorkingTreeMetadata: Bool) async -> [DiffFileEntry] {
+        let loadSpan = PerformanceTrace.shared.begin(.comparisonLoad)
+        defer { PerformanceTrace.shared.end(loadSpan) }
         async let statusOutput = GitProcess.run(
             ["--no-optional-locks", "diff", "--no-ext-diff", "--name-status", "-z"] + revisions + ["--"],
             at: path
@@ -57,6 +59,7 @@ enum GitDiffService {
         let (output, countsResult) = await (statusOutput, countsOutput)
         guard output.exitCode == 0 else { return [] }
         let counts = countsResult.exitCode == 0 ? parseNumstat(countsResult.stdout) : [:]
+        let parseSpan = PerformanceTrace.shared.begin(.comparisonParse)
         let fields = output.stdout.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
         var entries: [DiffFileEntry] = []
         var index = 0
@@ -86,6 +89,8 @@ enum GitDiffService {
             }
         }
 
+        PerformanceTrace.shared.end(parseSpan, itemCount: entries.count)
+        let metadataSpan = PerformanceTrace.shared.begin(.comparisonMetadata)
         for index in entries.indices {
             if let lineCounts = counts[entries[index].path] {
                 entries[index].additions = lineCounts.additions
@@ -99,6 +104,7 @@ enum GitDiffService {
                 }
             }
         }
+        PerformanceTrace.shared.end(metadataSpan, itemCount: entries.count)
         return entries
     }
 
@@ -108,6 +114,8 @@ enum GitDiffService {
     /// (dan ignored bila `includeIgnored` dinyalakan dari toggle "Show Ignored
     /// Files"), lengkap dengan jumlah baris ditambah/dihapus.
     static func statusSnapshot(at path: String, includeIgnored: Bool = false) async -> GitDiffStatusSnapshot {
+        let loadSpan = PerformanceTrace.shared.begin(.statusLoad)
+        defer { PerformanceTrace.shared.end(loadSpan) }
         var arguments = ["--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z"]
         if includeIgnored {
             // Mode "traditional" (default `--ignored`), bukan "matching": direktori yang
@@ -122,16 +130,19 @@ enum GitDiffService {
             return GitDiffStatusSnapshot(entries: [], headerStatus: nil)
         }
 
+        let parseSpan = PerformanceTrace.shared.begin(.statusParse)
         let records = statusOutput.stdout.split(separator: "\0", omittingEmptySubsequences: true)
         var entries = parsePorcelainV2(records)
         let headerStatus = GitService.headerStatus(from: records)
         let untrackedFiles = entries.filter { $0.group == .untracked }.map(\.path)
+        PerformanceTrace.shared.end(parseSpan, itemCount: entries.count)
 
         async let stagedCounts = numstat(at: path, cached: true)
         async let unstagedCounts = numstat(at: path, cached: false)
         async let untrackedCountsRequest = untrackedCounts(at: path, files: untrackedFiles)
         let (staged, unstaged, untracked) = await (stagedCounts, unstagedCounts, untrackedCountsRequest)
 
+        let metadataSpan = PerformanceTrace.shared.begin(.statusMetadata)
         for index in entries.indices {
             switch entries[index].group {
             case .staged:
@@ -160,6 +171,7 @@ enum GitDiffService {
             }
         }
 
+        PerformanceTrace.shared.end(metadataSpan, itemCount: entries.count)
         return GitDiffStatusSnapshot(entries: entries, headerStatus: headerStatus)
     }
 
@@ -289,6 +301,8 @@ enum GitDiffService {
     }
 
     nonisolated private static func parseNumstat(_ output: String) -> [String: LineCounts] {
+        let span = PerformanceTrace.shared.begin(.numstatParse)
+        defer { PerformanceTrace.shared.end(span) }
         var result: [String: LineCounts] = [:]
         let records = output.split(separator: "\0", omittingEmptySubsequences: false)
         var index = 0
@@ -314,6 +328,8 @@ enum GitDiffService {
     }
 
     nonisolated private static func untrackedCount(at path: String, file: String) -> LineCounts? {
+        let span = PerformanceTrace.shared.begin(.untrackedRead)
+        defer { PerformanceTrace.shared.end(span) }
         let fileURL = URL(fileURLWithPath: (path as NSString).appendingPathComponent(file))
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
               let fileType = attributes[.type] as? FileAttributeType else { return nil }
@@ -438,6 +454,8 @@ enum GitDiffService {
     }
 
     nonisolated private static func parseUnifiedDiff(_ text: String) -> [DiffHunk] {
+        let span = PerformanceTrace.shared.begin(.diffParse)
+        defer { PerformanceTrace.shared.end(span) }
         var hunks: [DiffHunk] = []
         var currentHeader: String?
         var currentLines: [DiffLine] = []

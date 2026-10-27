@@ -61,10 +61,13 @@ final class FileViewerTab: Identifiable, ObservableObject {
 
     func reload() async {
         guard !isReloading else {
+            PerformanceTrace.shared.increment(.fileReloadCoalesced)
             reloadRequested = true
             return
         }
 
+        let span = PerformanceTrace.shared.begin(.fileReload)
+        defer { PerformanceTrace.shared.end(span) }
         isReloading = true
         repeat {
             reloadRequested = false
@@ -74,7 +77,10 @@ final class FileViewerTab: Identifiable, ObservableObject {
             let currentFingerprint = await Task.detached(priority: .utility) {
                 FileLoader.fingerprint(path: path)
             }.value
-            guard !wasLoaded || currentFingerprint != previousFingerprint else { continue }
+            guard !wasLoaded || currentFingerprint != previousFingerprint else {
+                PerformanceTrace.shared.increment(.fileFingerprintUnchanged)
+                continue
+            }
 
             let loaded = await Task.detached(priority: .userInitiated) {
                 FileLoader.load(path: path)

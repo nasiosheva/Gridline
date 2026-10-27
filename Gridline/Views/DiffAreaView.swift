@@ -109,7 +109,13 @@ final class DiffColumnCountCache {
     private var maximumColumns = 0
 
     func count(for diff: FileDiff) -> Int {
-        guard rawText != diff.rawText else { return maximumColumns }
+        let span = PerformanceTrace.shared.begin(.diffColumns)
+        defer { PerformanceTrace.shared.end(span) }
+        guard rawText != diff.rawText else {
+            PerformanceTrace.shared.increment(.columnCacheHit)
+            return maximumColumns
+        }
+        PerformanceTrace.shared.increment(.columnCacheMiss)
         maximumColumns = DiffFontMetrics.maximumColumns(in: diff)
         rawText = diff.rawText
         return maximumColumns
@@ -132,7 +138,13 @@ final class WordDiffHighlightCache {
     private var highlightsByLineID: [DiffLine.ID: [Range<Int>]] = [:]
 
     func highlights(for diff: FileDiff) -> [DiffLine.ID: [Range<Int>]] {
-        guard rawText != diff.rawText else { return highlightsByLineID }
+        let span = PerformanceTrace.shared.begin(.wordHighlight)
+        defer { PerformanceTrace.shared.end(span) }
+        guard rawText != diff.rawText else {
+            PerformanceTrace.shared.increment(.highlightCacheHit)
+            return highlightsByLineID
+        }
+        PerformanceTrace.shared.increment(.highlightCacheMiss)
         rawText = diff.rawText
         highlightsByLineID = Self.compute(for: diff)
         return highlightsByLineID
@@ -331,7 +343,10 @@ private struct DiffFileListView: View {
     }
 
     private func orderedForNavigation(_ entries: [DiffFileEntry]) -> [DiffFileEntry] {
-        fileListMode == .tree ? DiffFileTreePolicy.orderedEntries(from: entries) : entries
+        guard fileListMode == .tree else { return entries }
+        let span = PerformanceTrace.shared.begin(.treeBuild)
+        defer { PerformanceTrace.shared.end(span, itemCount: entries.count) }
+        return DiffFileTreePolicy.orderedEntries(from: entries)
     }
 
     /// Fungsi biasa (bukan langsung `if/else` di `body`) karena `body` dibaca
@@ -616,11 +631,7 @@ private struct DiffFileListView: View {
         if !entries.isEmpty {
             Section(title) {
                 if fileListMode == .tree {
-                    let rows = flattenedTreeRows(
-                        DiffFileTreePolicy.tree(from: entries),
-                        depth: 0,
-                        collapsedFolderIDs: collapsedFolderIDs
-                    )
+                    let rows = treeDisplayRows(for: entries)
                     ForEach(rows) { row in
                         DiffFileTreeRow(
                             row: row,
@@ -649,6 +660,14 @@ private struct DiffFileListView: View {
                 }
             }
         }
+    }
+
+    private func treeDisplayRows(for entries: [DiffFileEntry]) -> [DiffTreeDisplayRow] {
+        let span = PerformanceTrace.shared.begin(.treeBuild)
+        defer { PerformanceTrace.shared.end(span, itemCount: entries.count) }
+        return flattenedTreeRows(
+            DiffFileTreePolicy.tree(from: entries), depth: 0, collapsedFolderIDs: collapsedFolderIDs
+        )
     }
 
     private func toggleFolderCollapse(_ id: String) {
